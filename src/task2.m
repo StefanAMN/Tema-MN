@@ -1,7 +1,7 @@
 function [W_LH, W_HL, W, H] = task2(A_tilde)
 % TASK2 Task 2: Decuplarea caracteristicilor cu Transformata Wavelet (20 puncte parțiale)
 %
-% Input:
+% Inputs:
 %   A_tilde - Filtered spatial image matrix N x N (N = 64)
 %
 % Outputs:
@@ -13,19 +13,20 @@ function [W_LH, W_HL, W, H] = task2(A_tilde)
     N = size(A_tilde, 1);
     K = N / 2;
     
-    % Initialize outputs
+    % Subtask 2.1 (10p): Construct Haar transformation matrix H and compute W
     H = zeros(N, N);
-    W = zeros(N, N);
-    W_LH = zeros(K, K);
-    W_HL = zeros(K, K);
+    for i = 1:K
+        % Scaling basis vectors (top half)
+        H(i, 2*i-1) = 1 / sqrt(2);
+        H(i, 2*i)   = 1 / sqrt(2);
+        % Wavelet basis vectors (bottom half)
+        H(K+i, 2*i-1) = 1 / sqrt(2);
+        H(K+i, 2*i)   = -1 / sqrt(2);
+    end
+    
+    W = H * A_tilde * H';
 
-    % TODO: Subtask 2.1 (10p)
-    % Construct Haar transformation matrix H (N x N)
-    % Calculate wavelet coefficient matrix: W = H * A_tilde * H'
-
-    % TODO: Subtask 2.2 (10p)
-    % Extract submatrices of size (N/2 x N/2):
-    % W_LH (top-right quadrant, rows 1..N/2, cols N/2+1..N)
-    % W_HL (bottom-left quadrant, rows N/2+1..N, cols 1..N/2)
-
+    % Subtask 2.2 (10p): Extract submatrices W_LH and W_HL
+    W_LH = W(1:K, K+1:N);
+    W_HL = W(K+1:N, 1:K);
 end
