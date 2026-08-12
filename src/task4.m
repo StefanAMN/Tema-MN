@@ -1,18 +1,19 @@
-function [predicted_class, min_dist, b, v, distances] = task4(S, h1, h2, h3)
+function [predicted_class, min_dist, b, v, distances] = task4(S, known_hashes)
 % TASK4 Task 4: Compresia semnalului, Hashing și Clasificare (20 puncte parțiale)
 %
 % Inputs:
 %   S               - Feature magnitude matrix (K x K, K = 32)
-%   h1, h2, h3      - Target binary hash vectors in database (K x 1 or 1 x K, values in {-1, 1})
+%   known_hashes    - Matrix of size K x C, where each column is a binary hash for a known class
 %
 % Outputs:
-%   predicted_class - Index of closest matching character in database (1, 2, or 3)
+%   predicted_class - Index of closest matching character in database
 %   min_dist        - Minimum Hamming distance value
-%   b               - Generated binary hash code vector (K x 1, values in {-1, 1})
+%   b               - Generated binary hash code vector (K x 1)
 %   v               - Vector of singular values extracted from S (K x 1)
-%   distances       - Vector of 3 Hamming distances [d1, d2, d3]
+%   distances       - Vector of C Hamming distances
 
     K = size(S, 1);
+    C = size(known_hashes, 2);
     v = zeros(K, 1);
     b = zeros(K, 1);
     distances = zeros(1, 3);

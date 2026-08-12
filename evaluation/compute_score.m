@@ -61,7 +61,7 @@ function [total_score, task_scores] = compute_score(t1_res, t2_res, t3_res, t4_r
     if isfield(t4_res, 'b') && isequal(t4_res.b(:), ref.b(:))
         t4_pts = t4_pts + 5;  % Subtask 4.2 (5p)
     end
-    if isfield(t4_res, 'predicted_class') && t4_res.predicted_class == ref.predicted_class
+    if isfield(t4_res, 'predicted_class') && ~isempty(ref.predicted_class) && t4_res.predicted_class == ref.predicted_class
         t4_pts = t4_pts + 5;  % Subtask 4.3 (5p)
     end
     task_scores(4) = t4_pts;
