@@ -4,8 +4,8 @@ FROM ubuntu:22.04
 # Avoid prompts from apt during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Octave and Make
-RUN apt-get update && apt-get install -y \
+# Install Octave and Make (using --no-install-recommends to massively reduce build time)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     octave \
     make \
     && rm -rf /var/lib/apt/lists/*
