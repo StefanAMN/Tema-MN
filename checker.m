@@ -121,7 +121,16 @@ function checker()
         % Evaluate score for this image
         [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
         
-        fprintf('  Inscripție %-15s -> mapat la simbolul %d (Scor: %.2f/90)\n', img_files(i).name, ref.predicted_class, img_score);
+        % Calculate probability for display
+        img_prob = 0;
+        if isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
+            d = t4_res.distances;
+            s = 32 - d;
+            P = s / 32;
+            img_prob = max(P) * 100;
+        end
+        
+        fprintf('  Inscripție %-15s -> mapat la simbolul %d (Incredere: %5.1f%%, Scor: %.2f/90)\n', img_files(i).name, ref.predicted_class, img_prob, img_score);
         
         total_score_sum = total_score_sum + img_score;
         task_scores_sum = task_scores_sum + img_task_scores;
