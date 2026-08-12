@@ -21,7 +21,7 @@ test: check
 
 submit:
 	@echo "Creare arhivă submission $(SUBMISSION_NAME)..."
-	@zip -j $(SUBMISSION_NAME) src/task1.m src/task2.m src/task3.m src/task4.m src/Dif.m src/SVD.m src/process_oracle_inscription.m
+	@zip -j $(SUBMISSION_NAME) src/task1.m src/task2.m src/task3.m src/task4.m src/process_oracle_inscription.m
 	@echo "Arhiva a fost creată cu succes."
 
 clean:
