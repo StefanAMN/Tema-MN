@@ -8,11 +8,11 @@ SUBMISSION_NAME := submission.zip
 
 help:
 	@echo "Comenzi disponibile pentru Tema MN:"
-	@echo "  make check      - Rulează checker-ul automat în Octave"
+	@echo "  make check      - Ruleaza checker-ul automat in Octave"
 	@echo "  make test       - Alias pentru make check"
-	@echo "  make submit     - Creează arhiva submission.zip pentru trimitere"
-	@echo "  make clean      - Șterge arhiva submission.zip"
-	@echo "  make docker-check - Construiește imaginea Docker și rulează checker-ul în container"
+	@echo "  make submit     - Creeaza arhiva submission.zip pentru trimitere"
+	@echo "  make clean      - Sterge arhiva submission.zip"
+	@echo "  make docker-check - Construieste imaginea Docker si ruleaza checker-ul in container"
 
 check:
 	@echo "Rulare checker..."
@@ -27,11 +27,11 @@ docker-check:
 	@docker run --rm oracle-checker
 
 submit:
-	@echo "Creare arhivă submission $(SUBMISSION_NAME)..."
+	@echo "Creare arhiva submission $(SUBMISSION_NAME)..."
 	@zip -j $(SUBMISSION_NAME) src/task1.m src/task2.m src/task3.m src/task4.m src/process_oracle_inscription.m
-	@echo "Arhiva a fost creată cu succes."
+	@echo "Arhiva a fost creata cu succes."
 
 clean:
-	@echo "Curățare fișiere generate..."
+	@echo "Curatare fisiere generate..."
 	@rm -f $(SUBMISSION_NAME)
-	@echo "Curățat."
+	@echo "Curatat."
