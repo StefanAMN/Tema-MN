@@ -1,14 +1,11 @@
-function checker()
-% CHECKER Driver script to verify student implementation and compute partial score.
-%
-% Evaluates across Task 1 (30p), Task 2 (20p), Task 3 (20p), and Task 4 (20p).
-% Modified to run on real images, mapping to a dynamic database of N known symbols.
+% CHECKER Driver script to verify student implementation and compute full score.
 
+function checker()
     addpath('src');
     addpath('evaluation');
-    
+
     fprintf('========================================================================\n');
-    fprintf('       EVALUARE TEMA MN: RESTAURARE & CLASIFICARE INSCRIPȚII ORACOL       \n');
+    fprintf('        EVALUARE TEMA MN: RESTAURARE & CLASIFICARE INSCRIPȚII ORACOL        \n');
     fprintf('========================================================================\n\n');
 
     known_dir = 'data/known_symbols';
@@ -17,7 +14,7 @@ function checker()
         known_files = dir(fullfile(known_dir, '*.png'));
     end
     num_known = length(known_files);
-    
+
     if num_known == 0
         fprintf('Eroare: Nu s-au găsit imagini în baza de date %s\n', known_dir);
         return;
@@ -33,20 +30,24 @@ function checker()
         fprintf('Eroare: Nu s-au găsit imagini în %s\n', inscriptions_dir);
         return;
     end
-    
+
     fprintf('Faza 1: Se construiește baza de date cu %d simboluri cunoscute...\n', num_known);
-    
+
     N_size = 64;
     K_size = N_size / 2;
     known_hashes_ref = zeros(K_size, num_known);
     known_hashes_student = zeros(K_size, num_known);
-    
+
     for c = 1:num_known
         img_path = fullfile(known_dir, known_files(c).name);
         img_raw = imread(img_path);
-        if islogical(img_raw), img_double = double(img_raw);
-        elseif ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
-        else, img_double = double(img_raw); end
+        if islogical(img_raw)
+            img_double = double(img_raw);
+        elseif ndims(img_raw) == 3
+            img_double = double(rgb2gray(img_raw));
+        else
+            img_double = double(img_raw);
+        end
         
         img_resized = simple_resize(img_double, [N_size N_size]);
         A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
@@ -54,20 +55,20 @@ function checker()
         ref = build_reference_solution(A, []);
         known_hashes_ref(:, c) = ref.b;
         
-        % Run student logic to get student hash
         try
             [A_tilde] = task1(A);
             [W_LH, W_HL] = task2(A_tilde);
             [S] = task3(W_LH, W_HL);
-            [~, ~, b_student] = task4(S, ones(K_size, 1));
+            dummy_hashes = zeros(K_size, num_known);
+            [~, ~, b_student] = task4(S, dummy_hashes);
             known_hashes_student(:, c) = b_student;
         catch
-            known_hashes_student(:, c) = ref.b; % fallback to avoid breaking Phase 2
+            known_hashes_student(:, c) = ref.b;
         end
     end
-    
+
     fprintf('Faza 2: Se evaluează %d imagini reale...\n', num_images);
-    
+
     total_score_sum = 0;
     task_scores_sum = zeros(1, 4);
 
@@ -75,22 +76,25 @@ function checker()
         img_path = fullfile(inscriptions_dir, img_files(i).name);
         img_raw = imread(img_path);
         
-        if islogical(img_raw), img_double = double(img_raw);
-        elseif ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
-        else, img_double = double(img_raw); end
+        if islogical(img_raw)
+            img_double = double(img_raw);
+        elseif ndims(img_raw) == 3
+            img_double = double(rgb2gray(img_raw));
+        else
+            img_double = double(img_raw);
+        end
         
         img_resized = simple_resize(img_double, [N_size N_size]);
         A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
         
-        % Build reference solution using known hashes
         ref = build_reference_solution(A, known_hashes_ref);
 
-        % --- Run Student Implementation ---
         t1_res = struct(); t2_res = struct(); t3_res = struct(); t4_res = struct();
 
         try
             [t1_res.A_tilde, t1_res.X, t1_res.X_f, t1_res.M, t1_res.F] = task1(A);
-        catch, end
+        catch
+        end
 
         try
             if isfield(t1_res, 'A_tilde')
@@ -98,7 +102,8 @@ function checker()
             else
                 [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(ref.A_tilde);
             end
-        catch, end
+        catch
+        end
 
         try
             if isfield(t2_res, 'W_LH') && isfield(t2_res, 'W_HL')
@@ -106,36 +111,55 @@ function checker()
             else
                 [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(ref.W_LH, ref.W_HL);
             end
-        catch, end
+        catch
+        end
 
         try
             if isfield(t3_res, 'S')
-                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = ...
-                    task4(t3_res.S, known_hashes_student);
+                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(t3_res.S, known_hashes_student);
             else
-                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = ...
-                    task4(ref.S, known_hashes_ref);
+                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(ref.S, known_hashes_ref);
             end
-        catch, end
+        catch
+        end
 
-        % Evaluate score for this image
         [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
         
-        % Calculate probability for display
-        img_prob = 0;
+        % Corecție calcul Acuratețe: distanța minimă Hamming 0 înseamnă 100% potrivire
+        img_prob = 100;
         if isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
-            d = t4_res.distances;
-            s = 32 - d;
-            P = s / 32;
-            img_prob = max(P) * 100;
+            min_d = min(t4_res.distances);
+            img_prob = ((K_size - min_d) / K_size) * 100;
+        elseif isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
+            img_prob = ((K_size - t4_res.min_dist) / K_size) * 100;
         end
         
-        fprintf('  Inscripție %-15s -> mapat la simbolul %d (Incredere: %5.1f%%, Scor: %.2f/90)\n', img_files(i).name, ref.predicted_class, img_prob, img_score);
+        if img_prob >= 85
+            multiplier = 1.0;
+            calitate = 'Excelenta';
+        elseif img_prob >= 65
+            multiplier = 0.75;
+            calitate = 'Acceptabila';
+        else
+            multiplier = 0.20;
+            calitate = 'Slaba/Incerta';
+        end
+
+        img_score = img_score * multiplier;
+        img_task_scores = img_task_scores * multiplier;
+
+        predicted_cl = ref.predicted_class;
+        if isfield(t4_res, 'predicted_class') && ~isempty(t4_res.predicted_class)
+            predicted_cl = t4_res.predicted_class;
+        end
+        
+        fprintf('  Inscripție %-15s -> mapat la simbolul %d (Accuracy: %5.1f%% [%s], Scor: %.2f/90)\n', ...
+                img_files(i).name, predicted_cl, img_prob, calitate, img_score);
         
         total_score_sum = total_score_sum + img_score;
         task_scores_sum = task_scores_sum + img_task_scores;
     end
-    
+
     avg_total_score = total_score_sum / num_images;
     avg_task_scores = task_scores_sum / num_images;
 
@@ -148,7 +172,8 @@ function checker()
     fprintf('------------------------------------------------------------------------\n');
     fprintf('  PUNCTAJ TOTAL OBTINUT:                 %5.2f / 90 puncte\n', avg_total_score);
     fprintf('========================================================================\n');
-end
+endfunction
+
 
 function A_res = simple_resize(A, target_size)
     [R, C] = size(A);
@@ -156,7 +181,8 @@ function A_res = simple_resize(A, target_size)
     r_idx = round(linspace(1, R, N_r));
     c_idx = round(linspace(1, C, N_c));
     A_res = A(r_idx, c_idx);
-end
+endfunction
+
 
 function ref = build_reference_solution(A, known_hashes)
     N = size(A, 1);
@@ -235,4 +261,4 @@ function ref = build_reference_solution(A, known_hashes)
         ref.min_dist = [];
         ref.predicted_class = [];
     end
-end
+endfunction
