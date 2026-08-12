@@ -1,0 +1,7 @@
+# Generated submission archive
+submission.zip
+
+# Octave / MATLAB temporary files
+*.m~
+*.log
+.octave_hist
