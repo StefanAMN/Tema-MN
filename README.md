@@ -46,6 +46,20 @@ Pentru a crea arhiva `submission.zip` cu toate fișierele de cod din `src/`:
 make submit
 ```
 
+### 3. Evaluare cu Docker
+Dacă doriți să rulați evaluarea într-un mediu izolat și reproductibil (container), puteți utiliza Docker.
+
+Folosind Makefile:
+```bash
+make docker-check
+```
+
+Sau executând comenzile Docker manual:
+```bash
+docker build -t oracle-checker .
+docker run --rm oracle-checker
+```
+
 ---
 
 ## Punctaj și Cerințe

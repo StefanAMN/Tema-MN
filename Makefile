@@ -12,12 +12,19 @@ help:
 	@echo "  make test       - Alias pentru make check"
 	@echo "  make submit     - Creează arhiva submission.zip pentru trimitere"
 	@echo "  make clean      - Șterge arhiva submission.zip"
+	@echo "  make docker-check - Construiește imaginea Docker și rulează checker-ul în container"
 
 check:
 	@echo "Rulare checker..."
 	@octave --no-gui --eval "checker"
 
 test: check
+
+docker-check:
+	@echo "Construire imagine Docker..."
+	@docker build -t oracle-checker .
+	@echo "Rulare checker în Docker..."
+	@docker run --rm oracle-checker
 
 submit:
 	@echo "Creare arhivă submission $(SUBMISSION_NAME)..."
