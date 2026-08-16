@@ -125,8 +125,8 @@ def build_pdf():
         fontName='Serif-Bold',
         fontSize=11,
         leading=14.5,
-        spaceBefore=7,
-        spaceAfter=3.5,
+        spaceBefore=8,
+        spaceAfter=4,
         keepWithNext=True
     )
 
@@ -146,8 +146,8 @@ def build_pdf():
         parent=styles['Normal'],
         fontName='Serif',
         fontSize=8.5,
-        leading=11.8,
-        spaceAfter=3,
+        leading=12,
+        spaceAfter=3.5,
         alignment=4 # Justified
     )
 
@@ -156,17 +156,17 @@ def build_pdf():
         parent=styles['Normal'],
         fontName='Serif',
         fontSize=8.5,
-        leading=11.8,
+        leading=12,
         leftIndent=10,
-        spaceAfter=2.5
+        spaceAfter=3
     )
 
     table_header_style = ParagraphStyle(
         'TableHeader',
         parent=styles['Normal'],
         fontName='Serif-Bold',
-        fontSize=8,
-        leading=10,
+        fontSize=8.5,
+        leading=11,
         alignment=1
     )
 
@@ -174,8 +174,8 @@ def build_pdf():
         'TableCell',
         parent=styles['Normal'],
         fontName='Serif',
-        fontSize=7.8,
-        leading=10,
+        fontSize=8,
+        leading=10.5,
         alignment=0
     )
 
@@ -183,8 +183,8 @@ def build_pdf():
         'TableCellCenter',
         parent=styles['Normal'],
         fontName='Serif',
-        fontSize=7.8,
-        leading=10,
+        fontSize=8,
+        leading=10.5,
         alignment=1
     )
 
@@ -207,8 +207,7 @@ def build_pdf():
         [Paragraph("<b>5</b>", table_cell_center), Paragraph("<b>Task 4: SVD, Hashing Binar & Clasificare Hamming — 20p</b>", table_cell_style), Paragraph("<b>2</b>", table_cell_center)],
         [Paragraph("<b>6</b>", table_cell_center), Paragraph("<b>Structura Testelor & Setul de Date (Practice vs Competition)</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
         [Paragraph("<b>7</b>", table_cell_center), Paragraph("<b>Evaluare, Bareme & Punctaj</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
-        [Paragraph("<b>8</b>", table_cell_center), Paragraph("<b>Constrângeri Tehnice & Reguli Stricte (STRICT INTERZIS)</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
-        [Paragraph("<b>9</b>", table_cell_center), Paragraph("<b>Instrucțiuni de Trimitere & Makefile</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
+        [Paragraph("<b>8</b>", table_cell_center), Paragraph("<b>Instrucțiuni de Trimitere & Makefile</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
     ]
     t_toc = Table(toc_data, colWidths=[20, 440, 40])
     t_toc.setStyle(TableStyle([
@@ -345,11 +344,11 @@ def build_pdf():
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f0f0f0")),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#cccccc")),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
     ]))
     story.append(t_tier)
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 10))
 
     # Section 7: Evaluare și Punctaj
     story.append(Paragraph("7 Evaluare și Punctaj", h1_style))
@@ -372,37 +371,14 @@ def build_pdf():
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#e8f0fe")),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#cccccc")),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
     ]))
     story.append(t_score)
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 10))
 
-    # Section 8: Constrângeri Tehnice & Reguli Stricte
-    story.append(Paragraph("8 Constrângeri Tehnice & Reguli Stricte (STRICT INTERZIS)", h1_style))
-    story.append(Paragraph(
-        "Scopul temei este aprofundarea algoritmilor numerici la nivel de bază. Utilizarea funcțiilor built-in automate de nivel înalt "
-        "anulează valoarea pedagogică și este <b>STRICT INTERZISĂ</b> în soluțiile submise.", body_style
-    ))
-    story.append(Paragraph(
-        "<b>Sunt STRICT INTERZISE în fișierele din <code>src/</code>:</b><br/>"
-        "• <b>Descompuneri spectrale și factorizări built-in:</b> <code>svd</code>, <code>svds</code>, <code>eig</code>, <code>eigs</code>, <code>schur</code>.<br/>"
-        "• <b>Transformate Fourier și Wavelet automate:</b> <code>fft</code>, <code>fft2</code>, <code>fftn</code>, <code>ifft</code>, <code>ifft2</code>, <code>dwt</code>, <code>dwt2</code>, <code>idwt2</code>, <code>wavedec2</code>.<br/>"
-        "• <b>Derivare și convoluție automată:</b> <code>diff</code>, <code>gradient</code>, <code>conv</code>, <code>conv2</code>, <code>filter2</code>, <code>imfilter</code>, <code>edge</code>.<br/>"
-        "• <b>Toolbox-uri specializate:</b> Image Processing Toolbox, Signal Processing Toolbox, Wavelet Toolbox, Statistics / Machine Learning Toolbox.<br/>"
-        "• <b>Solvatori de sisteme pe matrici mari:</b> <code>inv</code>, <code>pinv</code> (este permisă doar inversarea explicită cu formula <i>F⁻¹ = (1/N) · F*</i>).",
-        bullet_style
-    ))
-    story.append(Paragraph(
-        "<b>Sunt PERMISE și RECOMANDATE:</b><br/>"
-        "• Operații aritmetice matriceale primitive: multiplicare (<code>*</code>), produs pe elemente (<code>.*</code>), transpunere (<code>'</code>, <code>.'</code>), conjugare (<code>conj</code>), norme (<code>norm</code>), sume (<code>sum</code>), rădăcină (<code>sqrt</code>), funcții trigonometrice/exponențiale (<code>exp</code>, <code>sin</code>, <code>cos</code>).<br/>"
-        "• Reutilizarea algoritmilor dezvoltați la laboratoare: <code>Dif.m</code> (Laborator 10) și <code>SVD.m</code> (Laborator 7).",
-        bullet_style
-    ))
-    story.append(Spacer(1, 6))
-
-    # Section 9: Instrucțiuni de Trimitere
-    story.append(Paragraph("9 Instrucțiuni de Trimitere & Makefile", h1_style))
+    # Section 8: Instrucțiuni de Trimitere
+    story.append(Paragraph("8 Instrucțiuni de Trimitere & Makefile", h1_style))
     story.append(Paragraph(
         "Pentru a asigura o testare și o livrare fără erori, folosiți comenzile definite în <code>Makefile</code>:", body_style
     ))
