@@ -34,4 +34,6 @@ submit:
 clean:
 	@echo "Curatare fisiere generate..."
 	@rm -f $(SUBMISSION_NAME)
+	@rm -rf results
 	@echo "Curatat."
+

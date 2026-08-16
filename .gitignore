@@ -9,3 +9,7 @@ submission.zip
 # Data cache
 data/_cache/
 
+# Generated results
+results/
+
+

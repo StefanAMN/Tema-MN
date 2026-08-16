@@ -1,6 +1,6 @@
 % CHECKER Driver script to verify student implementation and compute full score.
 %
-% Loads preprocessed .mat dataset files directly for high performance.
+% Generates local evaluation reports and result files in the 'results/' folder.
 %
 % Usage:
 %   checker()                          % Runs on default data/practice
@@ -19,6 +19,12 @@ function checker(test_dir, known_dir)
     fprintf('========================================================================\n');
     fprintf('Directoriu evaluat: %s\n', test_dir);
     fprintf('Baza de simboluri: %s\n\n', known_dir);
+
+    % Create results folder if it does not exist
+    results_dir = 'results';
+    if ~exist(results_dir, 'dir')
+        mkdir(results_dir);
+    end
 
     % --- Faza 1: Încărcare dicționar simboluri cunoscute (.mat) ---
     known_files = dir(fullfile(known_dir, '*.mat'));
@@ -144,17 +150,19 @@ function checker(test_dir, known_dir)
         return;
     end
 
-    fprintf('Faza 2: Se evaluează %d fișiere de test (.mat)...\n\n', num_images);
+    fprintf('Faza 2: Se evaluează %d fișiere de test...\n\n', num_images);
 
     total_score_sum = 0;
     task_scores_sum = zeros(1, 4);
     correct_classifications = 0;
     tier_stats = struct();
+    sample_reports = {};
 
     for i = 1:num_images
         img_entry = test_files_struct(i);
-        [~, ~, ext] = fileparts(img_entry.path);
+        [~, sample_base_name, ext] = fileparts(img_entry.path);
         
+        tic;
         if strcmp(ext, '.mat')
             mat_struct = load(img_entry.path);
             A = mat_struct.A;
@@ -205,6 +213,8 @@ function checker(test_dir, known_dir)
         catch
         end
 
+        exec_time = toc;
+
         [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
         
         predicted_cl = ref.predicted_class;
@@ -232,12 +242,20 @@ function checker(test_dir, known_dir)
             tier_stats.(t_key).total = 0;
             tier_stats.(t_key).correct = 0;
             tier_stats.(t_key).score = 0;
+            tier_stats.(t_key).samples = {};
         end
         tier_stats.(t_key).total = tier_stats.(t_key).total + 1;
         tier_stats.(t_key).score = tier_stats.(t_key).score + img_score;
         if is_correct
             tier_stats.(t_key).correct = tier_stats.(t_key).correct + 1;
         end
+
+        % Format line for tier report
+        sample_log = sprintf('Sample: %-22s | True: %2d | Pred: %2d [%4s] | Time: %6.3fs | Match: %5.1f%% | T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f | Total: %5.2f/90', ...
+                             img_entry.rel_name, img_entry.true_class, predicted_cl, ...
+                             ternary(is_correct, 'OK', 'MISS'), exec_time, img_match, ...
+                             img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4), img_score);
+        tier_stats.(t_key).samples{end+1} = sample_log;
 
         if img_entry.true_class > 0
             match_status = sprintf('Clasa Reală: %2d | Predicție: %2d [%s]', ...
@@ -270,8 +288,28 @@ function checker(test_dir, known_dir)
             fprintf('  • %-12s : %2d mostre evaluate | Scor Mediu: %5.2f/90\n', ...
                     t_name, t_data.total, t_data.score / t_data.total);
         end
+
+        % Write individual tier report file (e.g. results/tier1_report.txt)
+        tier_rep_file = fullfile(results_dir, sprintf('%s_report.txt', t_name));
+        fid_t = fopen(tier_rep_file, 'w');
+        fprintf(fid_t, "========================================================================\n");
+        fprintf(fid_t, "RAPORT EVALUARE TIER: %s\n", upper(t_name));
+        fprintf(fid_t, "Data rulării: %s\n", datestr(now));
+        fprintf(fid_t, "Mostre evaluate: %d\n", t_data.total);
+        if has_labels
+            fprintf(fid_t, "Clasificări corecte: %d/%d (Acuratețe %.2f%%)\n", ...
+                    t_data.correct, t_data.total, (t_data.correct / t_data.total)*100);
+        end
+        fprintf(fid_t, "Scor mediu obținut: %.2f / 90 puncte\n", t_data.score / t_data.total);
+        fprintf(fid_t, "========================================================================\n\n");
+        fprintf(fid_t, "DETALII PE FIECARE EȘANTION:\n");
+        for sm = 1:length(t_data.samples)
+            fprintf(fid_t, "%s\n", t_data.samples{sm});
+        end
+        fclose(fid_t);
     end
 
+    overall_acc = 0;
     if has_labels
         overall_acc = (correct_classifications / num_images) * 100;
         fprintf('\nACURATEȚE GLOBALĂ CLASIFICARE (TOP-1): %d/%d (%.2f%%)\n', ...
@@ -287,6 +325,31 @@ function checker(test_dir, known_dir)
     fprintf('------------------------------------------------------------------------\n');
     fprintf('  PUNCTAJ TOTAL MEDIU:                       %5.2f / 90 puncte\n', avg_total_score);
     fprintf('========================================================================\n');
+
+    % Write global summary file: results/evaluation_summary.txt
+    summary_file = fullfile(results_dir, 'evaluation_summary.txt');
+    fid_s = fopen(summary_file, 'w');
+    fprintf(fid_s, "========================================================================\n");
+    fprintf(fid_s, "       REZUMAT EVALUARE OFICIALĂ TEMA METODE NUMERICE 2026             \n");
+    fprintf(fid_s, "========================================================================\n");
+    fprintf(fid_s, "Directoriu evaluat: %s\n", test_dir);
+    fprintf(fid_s, "Data: %s\n", datestr(now));
+    fprintf(fid_s, "Total mostre evaluate: %d\n\n", num_images);
+    if has_labels
+        fprintf(fid_s, "ACURATEȚE GLOBALĂ CLASIFICARE (TOP-1): %d/%d (%.2f%%)\n\n", ...
+                correct_classifications, num_images, overall_acc);
+    end
+    fprintf(fid_s, "PUNCTAJE MEDII PE TASK-URI:\n");
+    fprintf(fid_s, "  Task 1 (Filtrare Fourier 2D):              %5.2f / 30 puncte\n", avg_task_scores(1));
+    fprintf(fid_s, "  Task 2 (Transformata Wavelet Haar 2D):      %5.2f / 20 puncte\n", avg_task_scores(2));
+    fprintf(fid_s, "  Task 3 (Diferențiere Numerică Asimetrică): %5.2f / 20 puncte\n", avg_task_scores(3));
+    fprintf(fid_s, "  Task 4 (SVD, Hashing & Clasificare):        %5.2f / 20 puncte\n", avg_task_scores(4));
+    fprintf(fid_s, "------------------------------------------------------------------------\n");
+    fprintf(fid_s, "PUNCTAJ TOTAL OBTINUT:                       %5.2f / 90 puncte\n", avg_total_score);
+    fprintf(fid_s, "========================================================================\n");
+    fclose(fid_s);
+
+    fprintf('\nRaportul de evaluare a fost salvat în directorul: %s/\n', results_dir);
 endfunction
 
 function out = ternary(cond, val_true, val_false)
