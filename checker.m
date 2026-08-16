@@ -1,7 +1,7 @@
 % CHECKER Driver script to verify student implementation and compute full score.
 %
 % Generates local evaluation reports and result files in the 'results/' folder.
-% Randomizes execution order within each tier and outputs clean test scores.
+% Randomizes execution order within each tier and outputs clean test scores with tier headers.
 %
 % Usage:
 %   checker()                          % Runs on default data/practice
@@ -151,140 +151,156 @@ function checker(test_dir, known_dir)
         return;
     end
 
-    % --- Randomizare ordine de execuție pe fiecare Tier ---
+    % --- Organizare și sortare Tiers ---
+    tier_order = {'tier1', 'tier2', 'tier3', 'extra_hard'};
     all_tier_names = unique({test_files_struct.tier});
-    shuffled_test_files = [];
-    for t_i = 1:length(all_tier_names)
-        t_cur = all_tier_names{t_i};
-        t_indices = find(strcmp({test_files_struct.tier}, t_cur));
-        perm = randperm(length(t_indices));
-        shuffled_test_files = [shuffled_test_files; test_files_struct(t_indices(perm))];
+    ordered_tiers = {};
+    for to = 1:length(tier_order)
+        if any(strcmp(all_tier_names, tier_order{to}))
+            ordered_tiers{end+1} = tier_order{to};
+        end
     end
-    test_files_struct = shuffled_test_files;
+    for at = 1:length(all_tier_names)
+        if ~any(strcmp(ordered_tiers, all_tier_names{at}))
+            ordered_tiers{end+1} = all_tier_names{at};
+        end
+    end
 
-    fprintf('Faza 2: Se evaluează %d fișiere de test (ordine randomizată per tier)...\n\n', num_images);
+    fprintf('Faza 2: Se evaluează %d fișiere de test pe %d Tiers...\n\n', num_images, length(ordered_tiers));
 
     total_score_sum = 0;
     task_scores_sum = zeros(1, 4);
     correct_classifications = 0;
     tier_stats = struct();
 
-    for i = 1:num_images
-        img_entry = test_files_struct(i);
+    for t_i = 1:length(ordered_tiers)
+        t_name = ordered_tiers{t_i};
+        t_indices = find(strcmp({test_files_struct.tier}, t_name));
+        num_t_samples = length(t_indices);
         
-        tic;
-        [~, ~, ext] = fileparts(img_entry.path);
-        if strcmp(ext, '.mat')
-            mat_struct = load(img_entry.path);
-            A = mat_struct.A;
-            if isfield(mat_struct, 'class_id') && img_entry.true_class == 0
-                img_entry.true_class = mat_struct.class_id;
-            end
-        else
-            img_raw = imread(img_entry.path);
-            if ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
-            else, img_double = double(img_raw); end
-            img_resized = simple_resize(img_double, [N_size N_size]);
-            A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
-        end
-        
-        ref = build_reference_solution(A, known_hashes_ref);
+        % Randomizare ordine teste per tier
+        perm = randperm(num_t_samples);
+        t_indices = t_indices(perm);
 
-        t1_res = struct(); t2_res = struct(); t3_res = struct(); t4_res = struct();
+        fprintf('========================================================================\n');
+        fprintf('>>> EVALUARE %s (%d mostre)\n', upper(t_name), num_t_samples);
+        fprintf('========================================================================\n');
 
-        try
-            [t1_res.A_tilde, t1_res.X, t1_res.X_f, t1_res.M, t1_res.F] = task1(A);
-        catch
-        end
+        tier_stats.(t_name).total = 0;
+        tier_stats.(t_name).correct = 0;
+        tier_stats.(t_name).score = 0;
+        tier_stats.(t_name).samples = {};
 
-        try
-            if isfield(t1_res, 'A_tilde')
-                [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(t1_res.A_tilde);
+        for s_idx = 1:num_t_samples
+            img_entry = test_files_struct(t_indices(s_idx));
+            
+            tic;
+            [~, ~, ext] = fileparts(img_entry.path);
+            if strcmp(ext, '.mat')
+                mat_struct = load(img_entry.path);
+                A = mat_struct.A;
+                if isfield(mat_struct, 'class_id') && img_entry.true_class == 0
+                    img_entry.true_class = mat_struct.class_id;
+                end
             else
-                [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(ref.A_tilde);
+                img_raw = imread(img_entry.path);
+                if ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
+                else, img_double = double(img_raw); end
+                img_resized = simple_resize(img_double, [N_size N_size]);
+                A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
             end
-        catch
-        end
+            
+            ref = build_reference_solution(A, known_hashes_ref);
 
-        try
-            if isfield(t2_res, 'W_LH') && isfield(t2_res, 'W_HL')
-                [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(t2_res.W_LH, t2_res.W_HL);
-            else
-                [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(ref.W_LH, ref.W_HL);
+            t1_res = struct(); t2_res = struct(); t3_res = struct(); t4_res = struct();
+
+            try
+                [t1_res.A_tilde, t1_res.X, t1_res.X_f, t1_res.M, t1_res.F] = task1(A);
+            catch
             end
-        catch
-        end
 
-        try
-            if isfield(t3_res, 'S')
-                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(t3_res.S, known_hashes_student);
-            else
-                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(ref.S, known_hashes_ref);
+            try
+                if isfield(t1_res, 'A_tilde')
+                    [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(t1_res.A_tilde);
+                else
+                    [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(ref.A_tilde);
+                end
+            catch
             end
-        catch
-        end
 
-        exec_time = toc;
-
-        [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
-        
-        predicted_cl = ref.predicted_class;
-        if isfield(t4_res, 'predicted_class') && ~isempty(t4_res.predicted_class)
-            predicted_cl = t4_res.predicted_class;
-        end
-
-        img_match = 100;
-        if isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
-            img_match = ((K_size - t4_res.min_dist) / K_size) * 100;
-        elseif isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
-            img_match = ((K_size - min(t4_res.distances)) / K_size) * 100;
-        end
-
-        is_correct = false;
-        if img_entry.true_class > 0
-            if predicted_cl == img_entry.true_class
-                is_correct = true;
-                correct_classifications = correct_classifications + 1;
+            try
+                if isfield(t2_res, 'W_LH') && isfield(t2_res, 'W_HL')
+                    [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(t2_res.W_LH, t2_res.W_HL);
+                else
+                    [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(ref.W_LH, ref.W_HL);
+                end
+            catch
             end
-        end
 
-        t_key = img_entry.tier;
-        if ~isfield(tier_stats, t_key)
-            tier_stats.(t_key).total = 0;
-            tier_stats.(t_key).correct = 0;
-            tier_stats.(t_key).score = 0;
-            tier_stats.(t_key).samples = {};
-        end
-        tier_stats.(t_key).total = tier_stats.(t_key).total + 1;
-        tier_stats.(t_key).score = tier_stats.(t_key).score + img_score;
-        if is_correct
-            tier_stats.(t_key).correct = tier_stats.(t_key).correct + 1;
-        end
+            try
+                if isfield(t3_res, 'S')
+                    [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(t3_res.S, known_hashes_student);
+                else
+                    [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(ref.S, known_hashes_ref);
+                end
+            catch
+            end
 
-        % Format line for tier report file
-        sample_log = sprintf('Sample: %-22s | True: %2d | Pred: %2d [%4s] | Time: %6.3fs | Match: %5.1f%% | T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f | Total: %5.2f/90', ...
-                             img_entry.rel_name, img_entry.true_class, predicted_cl, ...
-                             ternary(is_correct, 'OK', 'MISS'), exec_time, img_match, ...
-                             img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4), img_score);
-        tier_stats.(t_key).samples{end+1} = sample_log;
+            exec_time = toc;
 
-        % Clean console output per test (only test result and task scores)
-        fprintf('  [%-10s] %-22s -> Scor: %5.2f/90 (T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f)\n', ...
-                img_entry.tier, img_entry.rel_name, img_score, ...
-                img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4));
-        
-        total_score_sum = total_score_sum + img_score;
-        task_scores_sum = task_scores_sum + img_task_scores;
+            [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
+            
+            predicted_cl = ref.predicted_class;
+            if isfield(t4_res, 'predicted_class') && ~isempty(t4_res.predicted_class)
+                predicted_cl = t4_res.predicted_class;
+            end
+
+            img_match = 100;
+            if isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
+                img_match = ((K_size - t4_res.min_dist) / K_size) * 100;
+            elseif isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
+                img_match = ((K_size - min(t4_res.distances)) / K_size) * 100;
+            end
+
+            is_correct = false;
+            if img_entry.true_class > 0
+                if predicted_cl == img_entry.true_class
+                    is_correct = true;
+                    correct_classifications = correct_classifications + 1;
+                end
+            end
+
+            tier_stats.(t_name).total = tier_stats.(t_name).total + 1;
+            tier_stats.(t_name).score = tier_stats.(t_name).score + img_score;
+            if is_correct
+                tier_stats.(t_name).correct = tier_stats.(t_name).correct + 1;
+            end
+
+            % Format line for tier report file
+            sample_log = sprintf('Sample: %-22s | True: %2d | Pred: %2d [%4s] | Time: %6.3fs | Match: %5.1f%% | T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f | Total: %5.2f/90', ...
+                                 img_entry.rel_name, img_entry.true_class, predicted_cl, ...
+                                 ternary(is_correct, 'OK', 'MISS'), exec_time, img_match, ...
+                                 img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4), img_score);
+            tier_stats.(t_name).samples{end+1} = sample_log;
+
+            % Clean console output per test (anonymous test index within tier)
+            fprintf('  • Test %2d/%2d -> Scor: %5.2f/90 (T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f)\n', ...
+                    s_idx, num_t_samples, img_score, ...
+                    img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4));
+            
+            total_score_sum = total_score_sum + img_score;
+            task_scores_sum = task_scores_sum + img_task_scores;
+        end
+        fprintf('\n');
     end
 
     avg_total_score = total_score_sum / num_images;
     avg_task_scores = task_scores_sum / num_images;
 
-    fprintf('\n------------------------------------------------------------------------\n');
+    fprintf('------------------------------------------------------------------------\n');
     fprintf('REZULTATE EVALUARE PE TIERS:\n');
-    tier_names = fieldnames(tier_stats);
-    for tn = 1:length(tier_names)
-        t_name = tier_names{tn};
+    for tn = 1:length(ordered_tiers)
+        t_name = ordered_tiers{tn};
         t_data = tier_stats.(t_name);
         fprintf('  • %-12s : %2d mostre evaluate | Scor Mediu: %5.2f/90\n', ...
                 t_name, t_data.total, t_data.score / t_data.total);
