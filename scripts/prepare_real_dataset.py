@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
 scripts/prepare_real_dataset.py
-Extracts completely UNIQUE, DISJOINT real Oracle-MNIST character images for:
-  - 10 known_symbols prototypes
-  - 30 distinct practice images (10 for tier1, 10 for tier2, 10 for tier3)
-  - 40 distinct competition images (10 for tier1, 10 for tier2, 10 for tier3, 10 for extra_hard)
+Extracts completely UNIQUE, DISJOINT real Oracle-MNIST character images and exports:
+  1. Preprocessed MATLAB/Octave .mat files (containing normalized matrix A, class_id, tier, N, K)
+  2. Visual .png preview images (for manual inspection and visualization scripts)
 
-Every single tier and symbol uses a different real artifact image from the dataset.
+Directories populated:
+  - data/known_symbols/ (symbol_01.mat/png ... symbol_10.mat/png)
+  - data/practice/ (tier1, tier2, tier3) + practice_labels.csv
+  - data/competition/ (tier1, tier2, tier3, extra_hard) + secret_labels.csv
 """
 
 import os
@@ -16,6 +18,7 @@ import urllib.request
 import csv
 import numpy as np
 from PIL import Image
+import scipy.io as sio
 
 BASE_URL = "https://raw.githubusercontent.com/wm-bupt/oracle-mnist/main/data/oracle/"
 IMG_FILE = "train-images-idx3-ubyte.gz"
@@ -56,7 +59,7 @@ def apply_tier_degradation(img_np, tier_name, seed=42):
     - Extra Hard: Real character + non-uniform lighting gradient + heavy texture noise
     """
     np.random.seed(seed)
-    img = img_np.astype(np.float32) / 255.0
+    img = img_np.astype(np.float64) / 255.0
 
     if tier_name == "tier1":
         out = np.clip(img * 1.05, 0.0, 1.0)
@@ -67,7 +70,7 @@ def apply_tier_degradation(img_np, tier_name, seed=42):
     elif tier_name == "tier3":
         # High-frequency noise + stroke thinning/erosion
         noise = np.random.normal(0, 0.14, img.shape)
-        mask = (np.random.rand(*img.shape) > 0.06).astype(np.float32)
+        mask = (np.random.rand(*img.shape) > 0.06).astype(np.float64)
         out = np.clip(img * mask + noise, 0.0, 1.0)
     elif tier_name == "extra_hard":
         # Complex non-uniform background gradient + heavier noise
@@ -81,23 +84,49 @@ def apply_tier_degradation(img_np, tier_name, seed=42):
     else:
         out = img
 
-    return (out * 255.0).astype(np.uint8)
+    # Normalize strictly to [0, 1]
+    min_val, max_val = np.min(out), np.max(out)
+    if max_val > min_val:
+        out_norm = (out - min_val) / (max_val - min_val)
+    else:
+        out_norm = out
 
-def process_and_save(img_28x28, out_path, target_size=64, tier_name=None, seed=42):
+    return out_norm
+
+def process_and_save(img_28x28, base_path_no_ext, target_size=64, class_id=1, tier_name=None, seed=42):
+    """
+    Saves both the .mat file (for fast native loading) and .png file (for preview/visualization).
+    """
     pil_img = Image.fromarray(img_28x28)
     pil_resized = pil_img.resize((target_size, target_size), Image.Resampling.BICUBIC)
     arr_64 = np.array(pil_resized)
     
     if tier_name is not None:
-        arr_final = apply_tier_degradation(arr_64, tier_name, seed)
+        arr_norm = apply_tier_degradation(arr_64, tier_name, seed)
     else:
-        arr_final = arr_64
+        arr_float = arr_64.astype(np.float64) / 255.0
+        min_val, max_val = np.min(arr_float), np.max(arr_float)
+        arr_norm = (arr_float - min_val) / (max_val - min_val + 1e-8)
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    Image.fromarray(arr_final).save(out_path)
+    os.makedirs(os.path.dirname(base_path_no_ext), exist_ok=True)
+
+    # 1. Save Visual PNG preview
+    png_path = base_path_no_ext + ".png"
+    arr_uint8 = np.clip(arr_norm * 255.0, 0, 255).astype(np.uint8)
+    Image.fromarray(arr_uint8).save(png_path)
+
+    # 2. Save Native MATLAB/Octave .mat file
+    mat_path = base_path_no_ext + ".mat"
+    mat_dict = {
+        'A': arr_norm.astype(np.float64),
+        'class_id': int(class_id),
+        'tier': str(tier_name if tier_name else 'known_symbol'),
+        'N': int(target_size),
+        'K': int(target_size // 2)
+    }
+    sio.savemat(mat_path, mat_dict, do_compression=True)
 
 def filter_good_samples(images, indices, min_stroke_ratio=0.12, max_stroke_ratio=0.55):
-    """Filter candidate images for good, distinct stroke representations."""
     valid = []
     for idx in indices:
         img = images[idx]
@@ -107,7 +136,7 @@ def filter_good_samples(images, indices, min_stroke_ratio=0.12, max_stroke_ratio
     return valid
 
 def main():
-    print("=== Oracle-MNIST: Generating 100% Unique Disjoint Real Dataset ===")
+    print("=== Oracle-MNIST: Generating Dataset (.mat + .png format) ===")
     img_gz = download_file(IMG_FILE)
     lbl_gz = download_file(LBL_FILE)
 
@@ -141,7 +170,6 @@ def main():
             for d in dirs:
                 os.rmdir(os.path.join(root, d))
 
-    # We will track used sample indices to guarantee 100% zero overlap
     used_indices = set()
 
     def get_unique_sample(c, start_offset=0):
@@ -150,7 +178,6 @@ def main():
             if candidate not in used_indices:
                 used_indices.add(candidate)
                 return candidate
-        # fallback
         for candidate in pool:
             if candidate not in used_indices:
                 used_indices.add(candidate)
@@ -158,15 +185,15 @@ def main():
         return pool[0]
 
     # 1. Known Symbols (10 distinct real prototype characters)
-    print("\n1. Generating known_symbols (10 unique prototype glyphs)...")
+    print("\n1. Generating known_symbols (.mat + .png)...")
     for c in range(10):
         sample_idx = get_unique_sample(c, start_offset=0)
-        sym_path = os.path.join(known_dir, f"symbol_{c+1:02d}.png")
-        process_and_save(images[sample_idx], sym_path, target_size=64)
-        print(f"  Class {c+1:02d} prototype -> sample idx {sample_idx} -> {sym_path}")
+        sym_base = os.path.join(known_dir, f"symbol_{c+1:02d}")
+        process_and_save(images[sample_idx], sym_base, target_size=64, class_id=c+1)
+        print(f"  Class {c+1:02d} -> {sym_base}.mat/.png")
 
-    # 2. Practice Dataset (3 Tiers x 10 Classes = 30 completely UNIQUE real images)
-    print("\n2. Generating data/practice/ (30 completely UNIQUE real images across 3 Tiers)...")
+    # 2. Practice Dataset (3 Tiers x 10 Classes = 30 unique real images)
+    print("\n2. Generating data/practice/ (30 unique samples on 3 Tiers)...")
     practice_labels = []
     tiers_practice = ["tier1", "tier2", "tier3"]
 
@@ -174,14 +201,13 @@ def main():
         tier_dir = os.path.join(practice_dir, tier)
         os.makedirs(tier_dir, exist_ok=True)
         for c in range(10):
-            # Pick a completely fresh, unique real image
             sample_idx = get_unique_sample(c, start_offset=10 + t_idx * 15)
-            fname = f"sample_{c+1:02d}.png"
-            fpath = os.path.join(tier_dir, fname)
-            rel_path = os.path.join(tier, fname)
+            fname_base = f"sample_{c+1:02d}"
+            fpath_base = os.path.join(tier_dir, fname_base)
+            rel_path_mat = os.path.join(tier, fname_base + ".mat")
             
-            process_and_save(images[sample_idx], fpath, target_size=64, tier_name=tier, seed=100 + t_idx * 20 + c)
-            practice_labels.append({"filename": rel_path, "class_id": c + 1, "tier": tier})
+            process_and_save(images[sample_idx], fpath_base, target_size=64, class_id=c+1, tier_name=tier, seed=100 + t_idx * 20 + c)
+            practice_labels.append({"filename": rel_path_mat, "class_id": c + 1, "tier": tier})
 
     practice_csv = os.path.join(practice_dir, "practice_labels.csv")
     with open(practice_csv, "w", newline="") as f:
@@ -190,8 +216,8 @@ def main():
         writer.writerows(practice_labels)
     print(f"  Wrote practice labels to {practice_csv}")
 
-    # 3. Competition Dataset (4 Tiers x 10 Classes = 40 completely UNIQUE real images)
-    print("\n3. Generating data/competition/ (40 completely UNIQUE real images across 4 Tiers)...")
+    # 3. Competition Dataset (4 Tiers x 10 Classes = 40 unique real images)
+    print("\n3. Generating data/competition/ (40 unique samples on 4 Tiers)...")
     competition_labels = []
     tiers_competition = ["tier1", "tier2", "tier3", "extra_hard"]
 
@@ -199,14 +225,13 @@ def main():
         tier_dir = os.path.join(competition_dir, tier)
         os.makedirs(tier_dir, exist_ok=True)
         for c in range(10):
-            # Pick a completely fresh, unique real image
             sample_idx = get_unique_sample(c, start_offset=80 + t_idx * 20)
-            fname = f"comp_sample_{c+1:02d}.png"
-            fpath = os.path.join(tier_dir, fname)
-            rel_path = os.path.join(tier, fname)
+            fname_base = f"comp_sample_{c+1:02d}"
+            fpath_base = os.path.join(tier_dir, fname_base)
+            rel_path_mat = os.path.join(tier, fname_base + ".mat")
             
-            process_and_save(images[sample_idx], fpath, target_size=64, tier_name=tier, seed=500 + t_idx * 20 + c)
-            competition_labels.append({"filename": rel_path, "class_id": c + 1, "tier": tier})
+            process_and_save(images[sample_idx], fpath_base, target_size=64, class_id=c+1, tier_name=tier, seed=500 + t_idx * 20 + c)
+            competition_labels.append({"filename": rel_path_mat, "class_id": c + 1, "tier": tier})
 
     secret_csv = os.path.join(competition_dir, "secret_labels.csv")
     with open(secret_csv, "w", newline="") as f:
@@ -215,7 +240,7 @@ def main():
         writer.writerows(competition_labels)
     print(f"  Wrote competition labels to {secret_csv}")
 
-    print(f"\nSuccessfully generated dataset! Total unique real images used: {len(used_indices)} (zero duplicates across symbols and tiers).")
+    print(f"\nSuccessfully generated dataset with .mat and .png files! Total unique samples: {len(used_indices)}.")
 
 if __name__ == "__main__":
     main()

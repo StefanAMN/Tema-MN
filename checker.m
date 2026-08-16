@@ -1,5 +1,7 @@
 % CHECKER Driver script to verify student implementation and compute full score.
 %
+% Loads preprocessed .mat dataset files directly for high performance.
+%
 % Usage:
 %   checker()                          % Runs on default data/practice
 %   checker('data/competition')        % Runs on secret competition evaluation set
@@ -18,10 +20,10 @@ function checker(test_dir, known_dir)
     fprintf('Directoriu evaluat: %s\n', test_dir);
     fprintf('Baza de simboluri: %s\n\n', known_dir);
 
-    % --- Faza 1: Încărcare dicționar simboluri cunoscute ---
-    known_files = dir(fullfile(known_dir, '*.png'));
+    % --- Faza 1: Încărcare dicționar simboluri cunoscute (.mat) ---
+    known_files = dir(fullfile(known_dir, '*.mat'));
     if isempty(known_files)
-        known_files = dir(fullfile(known_dir, '*.jpg'));
+        known_files = dir(fullfile(known_dir, '*.png'));
     end
     num_known = length(known_files);
 
@@ -43,17 +45,18 @@ function checker(test_dir, known_dir)
 
     for c = 1:num_known
         img_path = fullfile(known_dir, known_files(c).name);
-        img_raw = imread(img_path);
-        if islogical(img_raw)
-            img_double = double(img_raw);
-        elseif ndims(img_raw) == 3
-            img_double = double(rgb2gray(img_raw));
-        else
-            img_double = double(img_raw);
-        end
+        [~, ~, ext] = fileparts(img_path);
         
-        img_resized = simple_resize(img_double, [N_size N_size]);
-        A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
+        if strcmp(ext, '.mat')
+            mat_struct = load(img_path);
+            A = mat_struct.A;
+        else
+            img_raw = imread(img_path);
+            if ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
+            else, img_double = double(img_raw); end
+            img_resized = simple_resize(img_double, [N_size N_size]);
+            A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
+        end
         
         ref = build_reference_solution(A, []);
         known_hashes_ref(:, c) = ref.b;
@@ -72,10 +75,8 @@ function checker(test_dir, known_dir)
 
     % --- Faza 2: Căutare imagini de test & Ground Truth ---
     test_files_struct = [];
-    labels_map = struct();
     has_labels = false;
 
-    % Check for practice_labels.csv or secret_labels.csv
     csv_candidates = {
         fullfile(test_dir, 'practice_labels.csv'), ...
         fullfile(test_dir, 'secret_labels.csv'), ...
@@ -119,63 +120,54 @@ function checker(test_dir, known_dir)
     end
 
     if isempty(test_files_struct)
-        % Search subdirectories
+        % Search subdirectories for .mat files
         sub_dirs = dir(test_dir);
         for s = 1:length(sub_dirs)
             if sub_dirs(s).isdir && ~strcmp(sub_dirs(s).name, '.') && ~strcmp(sub_dirs(s).name, '..')
                 sub_path = fullfile(test_dir, sub_dirs(s).name);
-                imgs = dir(fullfile(sub_path, '*.png'));
-                if isempty(imgs), imgs = dir(fullfile(sub_path, '*.jpg')); end
-                for k = 1:length(imgs)
-                    entry.path = fullfile(sub_path, imgs(k).name);
-                    entry.rel_name = fullfile(sub_dirs(s).name, imgs(k).name);
+                mats = dir(fullfile(sub_path, '*.mat'));
+                if isempty(mats), mats = dir(fullfile(sub_path, '*.png')); end
+                for k = 1:length(mats)
+                    entry.path = fullfile(sub_path, mats(k).name);
+                    entry.rel_name = fullfile(sub_dirs(s).name, mats(k).name);
                     entry.true_class = 0;
                     entry.tier = sub_dirs(s).name;
                     test_files_struct = [test_files_struct; entry];
                 end
             end
         end
-        
-        % Check flat directory
-        flat_imgs = dir(fullfile(test_dir, '*.png'));
-        if isempty(flat_imgs), flat_imgs = dir(fullfile(test_dir, '*.jpg')); end
-        for k = 1:length(flat_imgs)
-            entry.path = fullfile(test_dir, flat_imgs(k).name);
-            entry.rel_name = flat_imgs(k).name;
-            entry.true_class = 0;
-            entry.tier = 'general';
-            test_files_struct = [test_files_struct; entry];
-        end
     end
 
     num_images = length(test_files_struct);
     if num_images == 0
-        fprintf('Eroare: Nu s-au găsit imagini de test în %s\n', test_dir);
+        fprintf('Eroare: Nu s-au găsit fișiere de test în %s\n', test_dir);
         return;
     end
 
-    fprintf('Faza 2: Se evaluează %d imagini de test...\n\n', num_images);
+    fprintf('Faza 2: Se evaluează %d fișiere de test (.mat)...\n\n', num_images);
 
     total_score_sum = 0;
     task_scores_sum = zeros(1, 4);
     correct_classifications = 0;
-    
     tier_stats = struct();
 
     for i = 1:num_images
         img_entry = test_files_struct(i);
-        img_raw = imread(img_entry.path);
+        [~, ~, ext] = fileparts(img_entry.path);
         
-        if islogical(img_raw)
-            img_double = double(img_raw);
-        elseif ndims(img_raw) == 3
-            img_double = double(rgb2gray(img_raw));
+        if strcmp(ext, '.mat')
+            mat_struct = load(img_entry.path);
+            A = mat_struct.A;
+            if isfield(mat_struct, 'class_id') && img_entry.true_class == 0
+                img_entry.true_class = mat_struct.class_id;
+            end
         else
-            img_double = double(img_raw);
+            img_raw = imread(img_entry.path);
+            if ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
+            else, img_double = double(img_raw); end
+            img_resized = simple_resize(img_double, [N_size N_size]);
+            A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
         end
-        
-        img_resized = simple_resize(img_double, [N_size N_size]);
-        A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
         
         ref = build_reference_solution(A, known_hashes_ref);
 
@@ -220,7 +212,6 @@ function checker(test_dir, known_dir)
             predicted_cl = t4_res.predicted_class;
         end
 
-        % Hamming bit match percentage
         img_match = 100;
         if isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
             img_match = ((K_size - t4_res.min_dist) / K_size) * 100;
@@ -236,7 +227,6 @@ function checker(test_dir, known_dir)
             end
         end
 
-        % Tier statistics tracking
         t_key = img_entry.tier;
         if ~isfield(tier_stats, t_key)
             tier_stats.(t_key).total = 0;
