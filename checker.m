@@ -1,35 +1,38 @@
 % CHECKER Driver script to verify student implementation and compute full score.
+%
+% Usage:
+%   checker()                          % Runs on default data/practice
+%   checker('data/competition')        % Runs on secret competition evaluation set
+%   checker('data/practice', 'data/known_symbols')
 
-function checker()
+function checker(test_dir, known_dir)
+    if nargin < 1 || isempty(test_dir), test_dir = 'data/practice'; end
+    if nargin < 2 || isempty(known_dir), known_dir = 'data/known_symbols'; end
+
     addpath('src');
     addpath('evaluation');
 
     fprintf('========================================================================\n');
     fprintf('        EVALUARE TEMA MN: RESTAURARE & CLASIFICARE INSCRIPȚII ORACOL        \n');
-    fprintf('========================================================================\n\n');
+    fprintf('========================================================================\n');
+    fprintf('Directoriu evaluat: %s\n', test_dir);
+    fprintf('Baza de simboluri: %s\n\n', known_dir);
 
-    known_dir = 'data/known_symbols';
-    known_files = dir(fullfile(known_dir, '*.jpg'));
+    % --- Faza 1: Încărcare dicționar simboluri cunoscute ---
+    known_files = dir(fullfile(known_dir, '*.png'));
     if isempty(known_files)
-        known_files = dir(fullfile(known_dir, '*.png'));
+        known_files = dir(fullfile(known_dir, '*.jpg'));
     end
     num_known = length(known_files);
 
     if num_known == 0
-        fprintf('Eroare: Nu s-au găsit imagini în baza de date %s\n', known_dir);
+        fprintf('Eroare: Nu s-au găsit simboluri de referință în %s\n', known_dir);
         return;
     end
 
-    inscriptions_dir = 'data/inscriptions_20';
-    img_files = dir(fullfile(inscriptions_dir, '*.jpg'));
-    if isempty(img_files)
-        img_files = dir(fullfile(inscriptions_dir, '*.png'));
-    end
-    num_images = length(img_files);
-    if num_images == 0
-        fprintf('Eroare: Nu s-au găsit imagini în %s\n', inscriptions_dir);
-        return;
-    end
+    % Sort alphabetically
+    [~, sort_idx] = sort({known_files.name});
+    known_files = known_files(sort_idx);
 
     fprintf('Faza 1: Se construiește baza de date cu %d simboluri cunoscute...\n', num_known);
 
@@ -67,14 +70,101 @@ function checker()
         end
     end
 
-    fprintf('Faza 2: Se evaluează %d imagini reale...\n', num_images);
+    % --- Faza 2: Căutare imagini de test & Ground Truth ---
+    test_files_struct = [];
+    labels_map = struct();
+    has_labels = false;
+
+    % Check for practice_labels.csv or secret_labels.csv
+    csv_candidates = {
+        fullfile(test_dir, 'practice_labels.csv'), ...
+        fullfile(test_dir, 'secret_labels.csv'), ...
+        fullfile(test_dir, 'labels.csv')
+    };
+
+    labels_file = '';
+    for i = 1:length(csv_candidates)
+        if exist(csv_candidates{i}, 'file')
+            labels_file = csv_candidates{i};
+            break;
+        end
+    end
+
+    if ~isempty(labels_file)
+        has_labels = true;
+        fid = fopen(labels_file, 'r');
+        header = fgetl(fid); % skip header
+        while ~feof(fid)
+            line = fgetl(fid);
+            if ischar(line) && ~isempty(strtrim(line))
+                parts = strsplit(strtrim(line), ',');
+                if length(parts) >= 2
+                    rel_f = parts{1};
+                    c_id = str2double(parts{2});
+                    t_name = 'general';
+                    if length(parts) >= 3, t_name = parts{3}; end
+                    
+                    full_p = fullfile(test_dir, rel_f);
+                    if exist(full_p, 'file')
+                        entry.path = full_p;
+                        entry.rel_name = rel_f;
+                        entry.true_class = c_id;
+                        entry.tier = t_name;
+                        test_files_struct = [test_files_struct; entry];
+                    end
+                end
+            end
+        end
+        fclose(fid);
+    end
+
+    if isempty(test_files_struct)
+        % Search subdirectories
+        sub_dirs = dir(test_dir);
+        for s = 1:length(sub_dirs)
+            if sub_dirs(s).isdir && ~strcmp(sub_dirs(s).name, '.') && ~strcmp(sub_dirs(s).name, '..')
+                sub_path = fullfile(test_dir, sub_dirs(s).name);
+                imgs = dir(fullfile(sub_path, '*.png'));
+                if isempty(imgs), imgs = dir(fullfile(sub_path, '*.jpg')); end
+                for k = 1:length(imgs)
+                    entry.path = fullfile(sub_path, imgs(k).name);
+                    entry.rel_name = fullfile(sub_dirs(s).name, imgs(k).name);
+                    entry.true_class = 0;
+                    entry.tier = sub_dirs(s).name;
+                    test_files_struct = [test_files_struct; entry];
+                end
+            end
+        end
+        
+        % Check flat directory
+        flat_imgs = dir(fullfile(test_dir, '*.png'));
+        if isempty(flat_imgs), flat_imgs = dir(fullfile(test_dir, '*.jpg')); end
+        for k = 1:length(flat_imgs)
+            entry.path = fullfile(test_dir, flat_imgs(k).name);
+            entry.rel_name = flat_imgs(k).name;
+            entry.true_class = 0;
+            entry.tier = 'general';
+            test_files_struct = [test_files_struct; entry];
+        end
+    end
+
+    num_images = length(test_files_struct);
+    if num_images == 0
+        fprintf('Eroare: Nu s-au găsit imagini de test în %s\n', test_dir);
+        return;
+    end
+
+    fprintf('Faza 2: Se evaluează %d imagini de test...\n\n', num_images);
 
     total_score_sum = 0;
     task_scores_sum = zeros(1, 4);
+    correct_classifications = 0;
+    
+    tier_stats = struct();
 
     for i = 1:num_images
-        img_path = fullfile(inscriptions_dir, img_files(i).name);
-        img_raw = imread(img_path);
+        img_entry = test_files_struct(i);
+        img_raw = imread(img_entry.path);
         
         if islogical(img_raw)
             img_double = double(img_raw);
@@ -125,36 +215,50 @@ function checker()
 
         [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
         
-        % Corecție calcul Acuratețe: distanța minimă Hamming 0 înseamnă 100% potrivire
-        img_prob = 100;
-        if isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
-            min_d = min(t4_res.distances);
-            img_prob = ((K_size - min_d) / K_size) * 100;
-        elseif isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
-            img_prob = ((K_size - t4_res.min_dist) / K_size) * 100;
-        end
-        
-        if img_prob >= 85
-            multiplier = 1.0;
-            calitate = 'Excelenta';
-        elseif img_prob >= 65
-            multiplier = 0.75;
-            calitate = 'Acceptabila';
-        else
-            multiplier = 0.20;
-            calitate = 'Slaba/Incerta';
-        end
-
-        img_score = img_score * multiplier;
-        img_task_scores = img_task_scores * multiplier;
-
         predicted_cl = ref.predicted_class;
         if isfield(t4_res, 'predicted_class') && ~isempty(t4_res.predicted_class)
             predicted_cl = t4_res.predicted_class;
         end
-        
-        fprintf('  Inscripție %-15s -> mapat la simbolul %d (Accuracy: %5.1f%% [%s], Scor: %.2f/90)\n', ...
-                img_files(i).name, predicted_cl, img_prob, calitate, img_score);
+
+        % Hamming bit match percentage
+        img_match = 100;
+        if isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
+            img_match = ((K_size - t4_res.min_dist) / K_size) * 100;
+        elseif isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
+            img_match = ((K_size - min(t4_res.distances)) / K_size) * 100;
+        end
+
+        is_correct = false;
+        if img_entry.true_class > 0
+            if predicted_cl == img_entry.true_class
+                is_correct = true;
+                correct_classifications = correct_classifications + 1;
+            end
+        end
+
+        % Tier statistics tracking
+        t_key = img_entry.tier;
+        if ~isfield(tier_stats, t_key)
+            tier_stats.(t_key).total = 0;
+            tier_stats.(t_key).correct = 0;
+            tier_stats.(t_key).score = 0;
+        end
+        tier_stats.(t_key).total = tier_stats.(t_key).total + 1;
+        tier_stats.(t_key).score = tier_stats.(t_key).score + img_score;
+        if is_correct
+            tier_stats.(t_key).correct = tier_stats.(t_key).correct + 1;
+        end
+
+        if img_entry.true_class > 0
+            match_status = sprintf('Clasa Reală: %2d | Predicție: %2d [%s]', ...
+                                   img_entry.true_class, predicted_cl, ...
+                                   ternary(is_correct, 'OK', 'MISS'));
+        else
+            match_status = sprintf('Predicție: %2d', predicted_cl);
+        end
+
+        fprintf('  [%-10s] %-20s -> %s (Bit Match: %5.1f%%, Scor: %5.2f/90)\n', ...
+                img_entry.tier, img_entry.rel_name, match_status, img_match, img_score);
         
         total_score_sum = total_score_sum + img_score;
         task_scores_sum = task_scores_sum + img_task_scores;
@@ -164,16 +268,44 @@ function checker()
     avg_task_scores = task_scores_sum / num_images;
 
     fprintf('\n------------------------------------------------------------------------\n');
-    fprintf('REZULTATE EVALUARE (MEDIE PE %d IMAGINI REALE):\n', num_images);
-    fprintf('  Task 1 (Filtrare Fourier 2D):           %5.2f / 30 puncte\n', avg_task_scores(1));
-    fprintf('  Task 2 (Transformata Wavelet Haar):     %5.2f / 20 puncte\n', avg_task_scores(2));
-    fprintf('  Task 3 (Diferențiere Numerică Asimetrică): %5.2f / 20 puncte\n', avg_task_scores(3));
-    fprintf('  Task 4 (SVD, Hashing & Clasificare):     %5.2f / 20 puncte\n', avg_task_scores(4));
+    fprintf('REZULTATE EVALUARE PE TIERS:\n');
+    tier_names = fieldnames(tier_stats);
+    for tn = 1:length(tier_names)
+        t_name = tier_names{tn};
+        t_data = tier_stats.(t_name);
+        if has_labels
+            fprintf('  • %-12s : %2d/%2d corecte (Acuratețe %5.1f%%) | Scor Mediu: %5.2f/90\n', ...
+                    t_name, t_data.correct, t_data.total, (t_data.correct / t_data.total)*100, t_data.score / t_data.total);
+        else
+            fprintf('  • %-12s : %2d mostre evaluate | Scor Mediu: %5.2f/90\n', ...
+                    t_name, t_data.total, t_data.score / t_data.total);
+        end
+    end
+
+    if has_labels
+        overall_acc = (correct_classifications / num_images) * 100;
+        fprintf('\nACURATEȚE GLOBALĂ CLASIFICARE (TOP-1): %d/%d (%.2f%%)\n', ...
+                correct_classifications, num_images, overall_acc);
+    end
+
     fprintf('------------------------------------------------------------------------\n');
-    fprintf('  PUNCTAJ TOTAL OBTINUT:                 %5.2f / 90 puncte\n', avg_total_score);
+    fprintf('MEDIE PUNCTAJE PARȚIALE PE TASK-URI:\n');
+    fprintf('  Task 1 (Filtrare Fourier 2D):              %5.2f / 30 puncte\n', avg_task_scores(1));
+    fprintf('  Task 2 (Transformata Wavelet Haar 2D):      %5.2f / 20 puncte\n', avg_task_scores(2));
+    fprintf('  Task 3 (Diferențiere Numerică Asimetrică): %5.2f / 20 puncte\n', avg_task_scores(3));
+    fprintf('  Task 4 (SVD, Hashing & Clasificare):        %5.2f / 20 puncte\n', avg_task_scores(4));
+    fprintf('------------------------------------------------------------------------\n');
+    fprintf('  PUNCTAJ TOTAL MEDIU:                       %5.2f / 90 puncte\n', avg_total_score);
     fprintf('========================================================================\n');
 endfunction
 
+function out = ternary(cond, val_true, val_false)
+    if cond
+        out = val_true;
+    else
+        out = val_false;
+    end
+endfunction
 
 function A_res = simple_resize(A, target_size)
     [R, C] = size(A);
@@ -182,7 +314,6 @@ function A_res = simple_resize(A, target_size)
     c_idx = round(linspace(1, C, N_c));
     A_res = A(r_idx, c_idx);
 endfunction
-
 
 function ref = build_reference_solution(A, known_hashes)
     N = size(A, 1);

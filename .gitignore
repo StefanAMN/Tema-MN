@@ -5,3 +5,7 @@ submission.zip
 *.m~
 *.log
 .octave_hist
+
+# Data cache
+data/_cache/
+
