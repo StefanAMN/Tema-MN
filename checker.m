@@ -1,6 +1,7 @@
 % CHECKER Driver script to verify student implementation and compute full score.
 %
 % Generates local evaluation reports and result files in the 'results/' folder.
+% Randomizes execution order within each tier and outputs clean test scores.
 %
 % Usage:
 %   checker()                          % Runs on default data/practice
@@ -150,19 +151,29 @@ function checker(test_dir, known_dir)
         return;
     end
 
-    fprintf('Faza 2: Se evaluează %d fișiere de test...\n\n', num_images);
+    % --- Randomizare ordine de execuție pe fiecare Tier ---
+    all_tier_names = unique({test_files_struct.tier});
+    shuffled_test_files = [];
+    for t_i = 1:length(all_tier_names)
+        t_cur = all_tier_names{t_i};
+        t_indices = find(strcmp({test_files_struct.tier}, t_cur));
+        perm = randperm(length(t_indices));
+        shuffled_test_files = [shuffled_test_files; test_files_struct(t_indices(perm))];
+    end
+    test_files_struct = shuffled_test_files;
+
+    fprintf('Faza 2: Se evaluează %d fișiere de test (ordine randomizată per tier)...\n\n', num_images);
 
     total_score_sum = 0;
     task_scores_sum = zeros(1, 4);
     correct_classifications = 0;
     tier_stats = struct();
-    sample_reports = {};
 
     for i = 1:num_images
         img_entry = test_files_struct(i);
-        [~, sample_base_name, ext] = fileparts(img_entry.path);
         
         tic;
+        [~, ~, ext] = fileparts(img_entry.path);
         if strcmp(ext, '.mat')
             mat_struct = load(img_entry.path);
             A = mat_struct.A;
@@ -250,23 +261,17 @@ function checker(test_dir, known_dir)
             tier_stats.(t_key).correct = tier_stats.(t_key).correct + 1;
         end
 
-        % Format line for tier report
+        % Format line for tier report file
         sample_log = sprintf('Sample: %-22s | True: %2d | Pred: %2d [%4s] | Time: %6.3fs | Match: %5.1f%% | T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f | Total: %5.2f/90', ...
                              img_entry.rel_name, img_entry.true_class, predicted_cl, ...
                              ternary(is_correct, 'OK', 'MISS'), exec_time, img_match, ...
                              img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4), img_score);
         tier_stats.(t_key).samples{end+1} = sample_log;
 
-        if img_entry.true_class > 0
-            match_status = sprintf('Clasa Reală: %2d | Predicție: %2d [%s]', ...
-                                   img_entry.true_class, predicted_cl, ...
-                                   ternary(is_correct, 'OK', 'MISS'));
-        else
-            match_status = sprintf('Predicție: %2d', predicted_cl);
-        end
-
-        fprintf('  [%-10s] %-20s -> %s (Bit Match: %5.1f%%, Scor: %5.2f/90)\n', ...
-                img_entry.tier, img_entry.rel_name, match_status, img_match, img_score);
+        % Clean console output per test (only test result and task scores)
+        fprintf('  [%-10s] %-22s -> Scor: %5.2f/90 (T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f)\n', ...
+                img_entry.tier, img_entry.rel_name, img_score, ...
+                img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4));
         
         total_score_sum = total_score_sum + img_score;
         task_scores_sum = task_scores_sum + img_task_scores;
@@ -281,13 +286,8 @@ function checker(test_dir, known_dir)
     for tn = 1:length(tier_names)
         t_name = tier_names{tn};
         t_data = tier_stats.(t_name);
-        if has_labels
-            fprintf('  • %-12s : %2d/%2d corecte (Acuratețe %5.1f%%) | Scor Mediu: %5.2f/90\n', ...
-                    t_name, t_data.correct, t_data.total, (t_data.correct / t_data.total)*100, t_data.score / t_data.total);
-        else
-            fprintf('  • %-12s : %2d mostre evaluate | Scor Mediu: %5.2f/90\n', ...
-                    t_name, t_data.total, t_data.score / t_data.total);
-        end
+        fprintf('  • %-12s : %2d mostre evaluate | Scor Mediu: %5.2f/90\n', ...
+                t_name, t_data.total, t_data.score / t_data.total);
 
         % Write individual tier report file (e.g. results/tier1_report.txt)
         tier_rep_file = fullfile(results_dir, sprintf('%s_report.txt', t_name));
@@ -307,13 +307,6 @@ function checker(test_dir, known_dir)
             fprintf(fid_t, "%s\n", t_data.samples{sm});
         end
         fclose(fid_t);
-    end
-
-    overall_acc = 0;
-    if has_labels
-        overall_acc = (correct_classifications / num_images) * 100;
-        fprintf('\nACURATEȚE GLOBALĂ CLASIFICARE (TOP-1): %d/%d (%.2f%%)\n', ...
-                correct_classifications, num_images, overall_acc);
     end
 
     fprintf('------------------------------------------------------------------------\n');
@@ -336,6 +329,7 @@ function checker(test_dir, known_dir)
     fprintf(fid_s, "Data: %s\n", datestr(now));
     fprintf(fid_s, "Total mostre evaluate: %d\n\n", num_images);
     if has_labels
+        overall_acc = (correct_classifications / num_images) * 100;
         fprintf(fid_s, "ACURATEȚE GLOBALĂ CLASIFICARE (TOP-1): %d/%d (%.2f%%)\n\n", ...
                 correct_classifications, num_images, overall_acc);
     end
