@@ -193,9 +193,8 @@ def build_pdf():
     # Title Block
     story.append(Paragraph("METODE NUMERICE", header_tag_style))
     story.append(Paragraph("Restaurarea și Clasificarea Inscripțiilor Oracol", title_style))
-    story.append(Paragraph("Proiect Practic | Enunț al Problemei & Specificație Tehnică", subtitle_style))
-    story.append(Paragraph("Versiunea 2.0 — Bază de Date Reală & Clasificare pe Tiers", version_style))
-    story.append(Spacer(1, 3))
+    story.append(Spacer(1, 8))
+
 
     # Table of Contents
     story.append(Paragraph("<b>Cuprins</b>", h2_style))
