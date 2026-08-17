@@ -199,16 +199,16 @@ def build_pdf():
     # Table of Contents
     story.append(Paragraph("<b>Cuprins</b>", h2_style))
     toc_data = [
-        [Paragraph("<b>1</b>", table_cell_center), Paragraph("<b>Configurația Problemei & Date de Intrare</b>", table_cell_style), Paragraph("<b>1</b>", table_cell_center)],
-        [Paragraph("<b>2</b>", table_cell_center), Paragraph("<b>Task 1: Filtrarea Frecvențelor Spațiale (Fourier 2D) — 30p</b>", table_cell_style), Paragraph("<b>1</b>", table_cell_center)],
-        [Paragraph("<b>3</b>", table_cell_center), Paragraph("<b>Task 2: Decuplarea Caracteristicilor (Wavelet Haar 2D) — 20p</b>", table_cell_style), Paragraph("<b>2</b>", table_cell_center)],
-        [Paragraph("<b>4</b>", table_cell_center), Paragraph("<b>Task 3: Extragerea Asimetrică & Gradientul Direcțional — 20p</b>", table_cell_style), Paragraph("<b>2</b>", table_cell_center)],
-        [Paragraph("<b>5</b>", table_cell_center), Paragraph("<b>Task 4: SVD, Hashing Binar & Clasificare Hamming — 20p</b>", table_cell_style), Paragraph("<b>2</b>", table_cell_center)],
-        [Paragraph("<b>6</b>", table_cell_center), Paragraph("<b>Structura Testelor & Setul de Date (Practice vs Competition)</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
-        [Paragraph("<b>7</b>", table_cell_center), Paragraph("<b>Evaluare, Bareme & Punctaj</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
-        [Paragraph("<b>8</b>", table_cell_center), Paragraph("<b>Instrucțiuni de Trimitere & Makefile</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
+        [Paragraph("<b>1.</b>", table_cell_center), Paragraph("<b>Configurația Problemei & Date de Intrare</b>", table_cell_style), Paragraph("<b>1</b>", table_cell_center)],
+        [Paragraph("<b>2.</b>", table_cell_center), Paragraph("<b>Task 1: Filtrarea Frecvențelor Spațiale (Fourier 2D) — 30p</b>", table_cell_style), Paragraph("<b>1</b>", table_cell_center)],
+        [Paragraph("<b>3.</b>", table_cell_center), Paragraph("<b>Task 2: Decuplarea Caracteristicilor (Wavelet Haar 2D) — 20p</b>", table_cell_style), Paragraph("<b>2</b>", table_cell_center)],
+        [Paragraph("<b>4.</b>", table_cell_center), Paragraph("<b>Task 3: Extragerea Asimetrică & Gradientul Direcțional — 20p</b>", table_cell_style), Paragraph("<b>2</b>", table_cell_center)],
+        [Paragraph("<b>5.</b>", table_cell_center), Paragraph("<b>Task 4: SVD, Hashing Binar & Clasificare Hamming — 20p</b>", table_cell_style), Paragraph("<b>2</b>", table_cell_center)],
+        [Paragraph("<b>6.</b>", table_cell_center), Paragraph("<b>Structura Testelor & Setul de Date (Practice vs Competition)</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
+        [Paragraph("<b>7.</b>", table_cell_center), Paragraph("<b>Evaluare, Bareme & Punctaj</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
+        [Paragraph("<b>8.</b>", table_cell_center), Paragraph("<b>Instrucțiuni de Trimitere & Makefile</b>", table_cell_style), Paragraph("<b>3</b>", table_cell_center)],
     ]
-    t_toc = Table(toc_data, colWidths=[20, 440, 40])
+    t_toc = Table(toc_data, colWidths=[22, 438, 40])
     t_toc.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('BOTTOMPADDING', (0,0), (-1,-1), 1),
@@ -219,7 +219,7 @@ def build_pdf():
     story.append(Spacer(1, 6))
 
     # Section 1: Configurația Problemei & Date de Intrare
-    story.append(Paragraph("1 Configurația Problemei & Date de Intrare", h1_style))
+    story.append(Paragraph("1. Configurația Problemei & Date de Intrare", h1_style))
     story.append(Paragraph(
         "Fiecare test furnizează o matrice pătratică <b>A ∈ ℝ^(N×N)</b> (cu <i>N = 64</i>), "
         "reprezentând intensitatea pixelilor normalizată în intervalul [0, 1] dintr-o imagine degradată a unui caracter antic oracol "
@@ -237,7 +237,7 @@ def build_pdf():
     story.append(Spacer(1, 5))
 
     # Section 2: Task 1
-    story.append(Paragraph("2 Task 1: Filtrarea Frecvențelor Spațiale (Fourier 2D) [30 puncte]", h1_style))
+    story.append(Paragraph("2. Task 1: Filtrarea Frecvențelor Spațiale (Fourier 2D) [30 puncte]", h1_style))
     story.append(Paragraph(
         "Pentru a elimina zgomotul de înaltă frecvență cauzat de porozitatea osului și degradarea fizică, imaginea este mapată în domeniul frecvenței "
         "folosind Transformata Fourier Discretă 2D (DFT 2D).", body_style
@@ -262,7 +262,7 @@ def build_pdf():
     story.append(PageBreak())
 
     # Section 3: Task 2
-    story.append(Paragraph("3 Task 2: Decuplarea Caracteristicilor (Wavelet Haar 2D) [20 puncte]", h1_style))
+    story.append(Paragraph("3. Task 2: Decuplarea Caracteristicilor (Wavelet Haar 2D) [20 puncte]", h1_style))
     story.append(Paragraph(
         "Pentru a decupla componentele direcționale ale trăsăturilor (linii orizontale vs verticale), se aplică Transformata Wavelet Discretă 2D "
         "(DWT 2D) utilizând baza ortonormată Haar.", body_style
@@ -284,7 +284,7 @@ def build_pdf():
     story.append(Spacer(1, 5))
 
     # Section 4: Task 3
-    story.append(Paragraph("4 Task 3: Extragerea Asimetrică & Gradientul Direcțional [20 puncte]", h1_style))
+    story.append(Paragraph("4. Task 3: Extragerea Asimetrică & Gradientul Direcțional [20 puncte]", h1_style))
     story.append(Paragraph(
         "Deoarece trăsăturile caligrafice oracol prezintă anizotropie puternică, aplicăm diferențierea numerică asimetrică folosind scriptul de laborator <code>Dif.m</code>.", body_style
     ))
@@ -302,7 +302,7 @@ def build_pdf():
     story.append(Spacer(1, 5))
 
     # Section 5: Task 4
-    story.append(Paragraph("5 Task 4: SVD, Hashing Binar & Clasificare Hamming [20 puncte]", h1_style))
+    story.append(Paragraph("5. Task 4: SVD, Hashing Binar & Clasificare Hamming [20 puncte]", h1_style))
     story.append(Paragraph(
         "Comprimați matricea <b>S</b> într-o amprentă binară compactă și clasificați caracterul prin distanță Hamming minimă față de dicționar.", body_style
     ))
@@ -326,7 +326,7 @@ def build_pdf():
     story.append(PageBreak())
 
     # Section 6: Structura Testelor & Setul de Date
-    story.append(Paragraph("6 Structura Testelor & Setul de Date", h1_style))
+    story.append(Paragraph("6. Structura Testelor & Setul de Date", h1_style))
     story.append(Paragraph(
         "Evaluarea temei folosește două seturi de date distincte pentru a măsura robustețea numerică și a preveni supra-optimizarea (hardcodarea):", body_style
     ))
@@ -350,7 +350,7 @@ def build_pdf():
     story.append(Spacer(1, 10))
 
     # Section 7: Evaluare și Punctaj
-    story.append(Paragraph("7 Evaluare și Punctaj", h1_style))
+    story.append(Paragraph("7. Evaluare și Punctaj", h1_style))
     story.append(Paragraph(
         "Punctajul maxim total este de <b>100 puncte</b>, distribuit astfel:", body_style
     ))
@@ -377,7 +377,7 @@ def build_pdf():
     story.append(Spacer(1, 10))
 
     # Section 8: Instrucțiuni de Trimitere
-    story.append(Paragraph("8 Instrucțiuni de Trimitere & Makefile", h1_style))
+    story.append(Paragraph("8. Instrucțiuni de Trimitere & Makefile", h1_style))
     story.append(Paragraph(
         "Pentru a asigura o testare și o livrare fără erori, folosiți comenzile definite în <code>Makefile</code>:", body_style
     ))
@@ -388,6 +388,7 @@ def build_pdf():
         "• <code>make clean</code> — Șterge fișierele și arhivele temporare generate.",
         bullet_style
     ))
+
     story.append(Paragraph(
         "<b>Atenție:</b> Arhiva <code>submission.zip</code> va fi evaluată automat pe un mediu curat Linux Octave peste datasetul secret <code>data/competition/</code>. "
         "Asigurați-vă că soluția voastră rulează fără erori și respectă semnăturile funcțiilor cerute!", body_style
