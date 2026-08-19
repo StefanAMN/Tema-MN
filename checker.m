@@ -1,35 +1,47 @@
 % CHECKER Driver script to verify student implementation and compute full score.
+%
+% Generates local evaluation reports and result files in the 'results/' folder.
+% Randomizes execution order within each tier and outputs clean test scores with tier headers.
+%
+% Usage:
+%   checker()                          % Runs on default data/practice
+%   checker('data/competition')        % Runs on secret competition evaluation set
+%   checker('data/practice', 'data/known_symbols')
 
-function checker()
+function checker(test_dir, known_dir)
+    if nargin < 1 || isempty(test_dir), test_dir = 'data/practice'; end
+    if nargin < 2 || isempty(known_dir), known_dir = 'data/known_symbols'; end
+
     addpath('src');
     addpath('evaluation');
 
     fprintf('========================================================================\n');
     fprintf('        EVALUARE TEMA MN: RESTAURARE & CLASIFICARE INSCRIPȚII ORACOL        \n');
-    fprintf('========================================================================\n\n');
+    fprintf('========================================================================\n');
+    fprintf('Directoriu evaluat: %s\n', test_dir);
+    fprintf('Baza de simboluri: %s\n\n', known_dir);
 
-    known_dir = 'data/known_symbols';
-    known_files = dir(fullfile(known_dir, '*.jpg'));
+    % Create results folder if it does not exist
+    results_dir = 'results';
+    if ~exist(results_dir, 'dir')
+        mkdir(results_dir);
+    end
+
+    % --- Faza 1: Încărcare dicționar simboluri cunoscute (.mat) ---
+    known_files = dir(fullfile(known_dir, '*.mat'));
     if isempty(known_files)
         known_files = dir(fullfile(known_dir, '*.png'));
     end
     num_known = length(known_files);
 
     if num_known == 0
-        fprintf('Eroare: Nu s-au găsit imagini în baza de date %s\n', known_dir);
+        fprintf('Eroare: Nu s-au găsit simboluri de referință în %s\n', known_dir);
         return;
     end
 
-    inscriptions_dir = 'data/inscriptions_20';
-    img_files = dir(fullfile(inscriptions_dir, '*.jpg'));
-    if isempty(img_files)
-        img_files = dir(fullfile(inscriptions_dir, '*.png'));
-    end
-    num_images = length(img_files);
-    if num_images == 0
-        fprintf('Eroare: Nu s-au găsit imagini în %s\n', inscriptions_dir);
-        return;
-    end
+    % Sort alphabetically
+    [~, sort_idx] = sort({known_files.name});
+    known_files = known_files(sort_idx);
 
     fprintf('Faza 1: Se construiește baza de date cu %d simboluri cunoscute...\n', num_known);
 
@@ -40,17 +52,18 @@ function checker()
 
     for c = 1:num_known
         img_path = fullfile(known_dir, known_files(c).name);
-        img_raw = imread(img_path);
-        if islogical(img_raw)
-            img_double = double(img_raw);
-        elseif ndims(img_raw) == 3
-            img_double = double(rgb2gray(img_raw));
-        else
-            img_double = double(img_raw);
-        end
+        [~, ~, ext] = fileparts(img_path);
         
-        img_resized = simple_resize(img_double, [N_size N_size]);
-        A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
+        if strcmp(ext, '.mat')
+            mat_struct = load(img_path);
+            A = mat_struct.A;
+        else
+            img_raw = imread(img_path);
+            if ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
+            else, img_double = double(img_raw); end
+            img_resized = simple_resize(img_double, [N_size N_size]);
+            A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
+        end
         
         ref = build_reference_solution(A, []);
         known_hashes_ref(:, c) = ref.b;
@@ -67,113 +80,295 @@ function checker()
         end
     end
 
-    fprintf('Faza 2: Se evaluează %d imagini reale...\n', num_images);
+    % --- Faza 2: Căutare imagini de test & Ground Truth ---
+    test_files_struct = [];
+    has_labels = false;
+
+    csv_candidates = {
+        fullfile(test_dir, 'practice_labels.csv'), ...
+        fullfile(test_dir, 'secret_labels.csv'), ...
+        fullfile(test_dir, 'labels.csv')
+    };
+
+    labels_file = '';
+    for i = 1:length(csv_candidates)
+        if exist(csv_candidates{i}, 'file')
+            labels_file = csv_candidates{i};
+            break;
+        end
+    end
+
+    if ~isempty(labels_file)
+        has_labels = true;
+        fid = fopen(labels_file, 'r');
+        header = fgetl(fid); % skip header
+        while ~feof(fid)
+            line = fgetl(fid);
+            if ischar(line) && ~isempty(strtrim(line))
+                parts = strsplit(strtrim(line), ',');
+                if length(parts) >= 2
+                    rel_f = parts{1};
+                    c_id = str2double(parts{2});
+                    t_name = 'general';
+                    if length(parts) >= 3, t_name = parts{3}; end
+                    
+                    full_p = fullfile(test_dir, rel_f);
+                    if exist(full_p, 'file')
+                        entry.path = full_p;
+                        entry.rel_name = rel_f;
+                        entry.true_class = c_id;
+                        entry.tier = t_name;
+                        test_files_struct = [test_files_struct; entry];
+                    end
+                end
+            end
+        end
+        fclose(fid);
+    end
+
+    if isempty(test_files_struct)
+        % Search subdirectories for .mat files
+        sub_dirs = dir(test_dir);
+        for s = 1:length(sub_dirs)
+            if sub_dirs(s).isdir && ~strcmp(sub_dirs(s).name, '.') && ~strcmp(sub_dirs(s).name, '..')
+                sub_path = fullfile(test_dir, sub_dirs(s).name);
+                mats = dir(fullfile(sub_path, '*.mat'));
+                if isempty(mats), mats = dir(fullfile(sub_path, '*.png')); end
+                for k = 1:length(mats)
+                    entry.path = fullfile(sub_path, mats(k).name);
+                    entry.rel_name = fullfile(sub_dirs(s).name, mats(k).name);
+                    entry.true_class = 0;
+                    entry.tier = sub_dirs(s).name;
+                    test_files_struct = [test_files_struct; entry];
+                end
+            end
+        end
+    end
+
+    num_images = length(test_files_struct);
+    if num_images == 0
+        fprintf('Eroare: Nu s-au găsit fișiere de test în %s\n', test_dir);
+        return;
+    end
+
+    % --- Organizare și sortare Tiers ---
+    tier_order = {'tier1', 'tier2', 'tier3', 'extra_hard'};
+    all_tier_names = unique({test_files_struct.tier});
+    ordered_tiers = {};
+    for to = 1:length(tier_order)
+        if any(strcmp(all_tier_names, tier_order{to}))
+            ordered_tiers{end+1} = tier_order{to};
+        end
+    end
+    for at = 1:length(all_tier_names)
+        if ~any(strcmp(ordered_tiers, all_tier_names{at}))
+            ordered_tiers{end+1} = all_tier_names{at};
+        end
+    end
+
+    fprintf('Faza 2: Se evaluează %d fișiere de test pe %d Tiers...\n\n', num_images, length(ordered_tiers));
 
     total_score_sum = 0;
     task_scores_sum = zeros(1, 4);
+    correct_classifications = 0;
+    tier_stats = struct();
 
-    for i = 1:num_images
-        img_path = fullfile(inscriptions_dir, img_files(i).name);
-        img_raw = imread(img_path);
+    for t_i = 1:length(ordered_tiers)
+        t_name = ordered_tiers{t_i};
+        t_indices = find(strcmp({test_files_struct.tier}, t_name));
+        num_t_samples = length(t_indices);
         
-        if islogical(img_raw)
-            img_double = double(img_raw);
-        elseif ndims(img_raw) == 3
-            img_double = double(rgb2gray(img_raw));
-        else
-            img_double = double(img_raw);
-        end
-        
-        img_resized = simple_resize(img_double, [N_size N_size]);
-        A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
-        
-        ref = build_reference_solution(A, known_hashes_ref);
+        % Randomizare ordine teste per tier
+        perm = randperm(num_t_samples);
+        t_indices = t_indices(perm);
 
-        t1_res = struct(); t2_res = struct(); t3_res = struct(); t4_res = struct();
+        fprintf('========================================================================\n');
+        fprintf('>>> EVALUARE %s (%d mostre)\n', upper(t_name), num_t_samples);
+        fprintf('========================================================================\n');
 
-        try
-            [t1_res.A_tilde, t1_res.X, t1_res.X_f, t1_res.M, t1_res.F] = task1(A);
-        catch
-        end
+        tier_stats.(t_name).total = 0;
+        tier_stats.(t_name).correct = 0;
+        tier_stats.(t_name).score = 0;
+        tier_stats.(t_name).samples = {};
 
-        try
-            if isfield(t1_res, 'A_tilde')
-                [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(t1_res.A_tilde);
+        for s_idx = 1:num_t_samples
+            img_entry = test_files_struct(t_indices(s_idx));
+            
+            tic;
+            [~, ~, ext] = fileparts(img_entry.path);
+            if strcmp(ext, '.mat')
+                mat_struct = load(img_entry.path);
+                A = mat_struct.A;
+                if isfield(mat_struct, 'class_id') && img_entry.true_class == 0
+                    img_entry.true_class = mat_struct.class_id;
+                end
             else
-                [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(ref.A_tilde);
+                img_raw = imread(img_entry.path);
+                if ndims(img_raw) == 3, img_double = double(rgb2gray(img_raw));
+                else, img_double = double(img_raw); end
+                img_resized = simple_resize(img_double, [N_size N_size]);
+                A = (img_resized - min(img_resized(:))) / (max(img_resized(:)) - min(img_resized(:)) + 1e-8);
             end
-        catch
-        end
+            
+            ref = build_reference_solution(A, known_hashes_ref);
 
-        try
-            if isfield(t2_res, 'W_LH') && isfield(t2_res, 'W_HL')
-                [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(t2_res.W_LH, t2_res.W_HL);
-            else
-                [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(ref.W_LH, ref.W_HL);
+            t1_res = struct(); t2_res = struct(); t3_res = struct(); t4_res = struct();
+
+            try
+                [t1_res.A_tilde, t1_res.X, t1_res.X_f, t1_res.M, t1_res.F] = task1(A);
+            catch
             end
-        catch
-        end
 
-        try
-            if isfield(t3_res, 'S')
-                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(t3_res.S, known_hashes_student);
-            else
-                [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(ref.S, known_hashes_ref);
+            try
+                if isfield(t1_res, 'A_tilde')
+                    [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(t1_res.A_tilde);
+                else
+                    [t2_res.W_LH, t2_res.W_HL, t2_res.W, t2_res.H] = task2(ref.A_tilde);
+                end
+            catch
             end
-        catch
-        end
 
-        [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
-        
-        % Corecție calcul Acuratețe: distanța minimă Hamming 0 înseamnă 100% potrivire
-        img_prob = 100;
-        if isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
-            min_d = min(t4_res.distances);
-            img_prob = ((K_size - min_d) / K_size) * 100;
-        elseif isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
-            img_prob = ((K_size - t4_res.min_dist) / K_size) * 100;
-        end
-        
-        if img_prob >= 85
-            multiplier = 1.0;
-            calitate = 'Excelenta';
-        elseif img_prob >= 65
-            multiplier = 0.75;
-            calitate = 'Acceptabila';
-        else
-            multiplier = 0.20;
-            calitate = 'Slaba/Incerta';
-        end
+            try
+                if isfield(t2_res, 'W_LH') && isfield(t2_res, 'W_HL')
+                    [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(t2_res.W_LH, t2_res.W_HL);
+                else
+                    [t3_res.S, t3_res.G_x, t3_res.G_y] = task3(ref.W_LH, ref.W_HL);
+                end
+            catch
+            end
 
-        img_score = img_score * multiplier;
-        img_task_scores = img_task_scores * multiplier;
+            try
+                if isfield(t3_res, 'S')
+                    [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(t3_res.S, known_hashes_student);
+                else
+                    [t4_res.predicted_class, t4_res.min_dist, t4_res.b, t4_res.v, t4_res.distances] = task4(ref.S, known_hashes_ref);
+                end
+            catch
+            end
 
-        predicted_cl = ref.predicted_class;
-        if isfield(t4_res, 'predicted_class') && ~isempty(t4_res.predicted_class)
-            predicted_cl = t4_res.predicted_class;
+            exec_time = toc;
+
+            [img_score, img_task_scores] = compute_score(t1_res, t2_res, t3_res, t4_res, ref);
+            
+            predicted_cl = ref.predicted_class;
+            if isfield(t4_res, 'predicted_class') && ~isempty(t4_res.predicted_class)
+                predicted_cl = t4_res.predicted_class;
+            end
+
+            img_match = 100;
+            if isfield(t4_res, 'min_dist') && ~isempty(t4_res.min_dist)
+                img_match = ((K_size - t4_res.min_dist) / K_size) * 100;
+            elseif isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
+                img_match = ((K_size - min(t4_res.distances)) / K_size) * 100;
+            end
+
+            is_correct = false;
+            if img_entry.true_class > 0
+                if predicted_cl == img_entry.true_class
+                    is_correct = true;
+                    correct_classifications = correct_classifications + 1;
+                end
+            end
+
+            tier_stats.(t_name).total = tier_stats.(t_name).total + 1;
+            tier_stats.(t_name).score = tier_stats.(t_name).score + img_score;
+            if is_correct
+                tier_stats.(t_name).correct = tier_stats.(t_name).correct + 1;
+            end
+
+            % Format line for tier report file
+            sample_log = sprintf('Sample: %-22s | True: %2d | Pred: %2d [%4s] | Time: %6.3fs | Match: %5.1f%% | T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f | Total: %5.2f/90', ...
+                                 img_entry.rel_name, img_entry.true_class, predicted_cl, ...
+                                 ternary(is_correct, 'OK', 'MISS'), exec_time, img_match, ...
+                                 img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4), img_score);
+            tier_stats.(t_name).samples{end+1} = sample_log;
+
+            % Clean console output per test (anonymous test index within tier)
+            fprintf('  • Test %2d/%2d -> Scor: %5.2f/90 (T1: %4.1f | T2: %4.1f | T3: %4.1f | T4: %4.1f)\n', ...
+                    s_idx, num_t_samples, img_score, ...
+                    img_task_scores(1), img_task_scores(2), img_task_scores(3), img_task_scores(4));
+            
+            total_score_sum = total_score_sum + img_score;
+            task_scores_sum = task_scores_sum + img_task_scores;
         end
-        
-        fprintf('  Inscripție %-15s -> mapat la simbolul %d (Accuracy: %5.1f%% [%s], Scor: %.2f/90)\n', ...
-                img_files(i).name, predicted_cl, img_prob, calitate, img_score);
-        
-        total_score_sum = total_score_sum + img_score;
-        task_scores_sum = task_scores_sum + img_task_scores;
+        fprintf('\n');
     end
 
     avg_total_score = total_score_sum / num_images;
     avg_task_scores = task_scores_sum / num_images;
 
-    fprintf('\n------------------------------------------------------------------------\n');
-    fprintf('REZULTATE EVALUARE (MEDIE PE %d IMAGINI REALE):\n', num_images);
-    fprintf('  Task 1 (Filtrare Fourier 2D):           %5.2f / 30 puncte\n', avg_task_scores(1));
-    fprintf('  Task 2 (Transformata Wavelet Haar):     %5.2f / 20 puncte\n', avg_task_scores(2));
-    fprintf('  Task 3 (Diferențiere Numerică Asimetrică): %5.2f / 20 puncte\n', avg_task_scores(3));
-    fprintf('  Task 4 (SVD, Hashing & Clasificare):     %5.2f / 20 puncte\n', avg_task_scores(4));
     fprintf('------------------------------------------------------------------------\n');
-    fprintf('  PUNCTAJ TOTAL OBTINUT:                 %5.2f / 90 puncte\n', avg_total_score);
+    fprintf('REZULTATE EVALUARE PE TIERS:\n');
+    for tn = 1:length(ordered_tiers)
+        t_name = ordered_tiers{tn};
+        t_data = tier_stats.(t_name);
+        fprintf('  • %-12s : %2d mostre evaluate | Scor Mediu: %5.2f/90\n', ...
+                t_name, t_data.total, t_data.score / t_data.total);
+
+        % Write individual tier report file (e.g. results/tier1_report.txt)
+        tier_rep_file = fullfile(results_dir, sprintf('%s_report.txt', t_name));
+        fid_t = fopen(tier_rep_file, 'w');
+        fprintf(fid_t, "========================================================================\n");
+        fprintf(fid_t, "RAPORT EVALUARE TIER: %s\n", upper(t_name));
+        fprintf(fid_t, "Data rulării: %s\n", datestr(now));
+        fprintf(fid_t, "Mostre evaluate: %d\n", t_data.total);
+        if has_labels
+            fprintf(fid_t, "Clasificări corecte: %d/%d (Acuratețe %.2f%%)\n", ...
+                    t_data.correct, t_data.total, (t_data.correct / t_data.total)*100);
+        end
+        fprintf(fid_t, "Scor mediu obținut: %.2f / 90 puncte\n", t_data.score / t_data.total);
+        fprintf(fid_t, "========================================================================\n\n");
+        fprintf(fid_t, "DETALII PE FIECARE EȘANTION:\n");
+        for sm = 1:length(t_data.samples)
+            fprintf(fid_t, "%s\n", t_data.samples{sm});
+        end
+        fclose(fid_t);
+    end
+
+    fprintf('------------------------------------------------------------------------\n');
+    fprintf('MEDIE PUNCTAJE PARȚIALE PE TASK-URI:\n');
+    fprintf('  Task 1 (Filtrare Fourier 2D):              %5.2f / 30 puncte\n', avg_task_scores(1));
+    fprintf('  Task 2 (Transformata Wavelet Haar 2D):      %5.2f / 20 puncte\n', avg_task_scores(2));
+    fprintf('  Task 3 (Diferențiere Numerică Asimetrică): %5.2f / 20 puncte\n', avg_task_scores(3));
+    fprintf('  Task 4 (SVD, Hashing & Clasificare):        %5.2f / 20 puncte\n', avg_task_scores(4));
+    fprintf('------------------------------------------------------------------------\n');
+    fprintf('  PUNCTAJ TOTAL MEDIU:                       %5.2f / 90 puncte\n', avg_total_score);
     fprintf('========================================================================\n');
+
+    % Write global summary file: results/evaluation_summary.txt
+    summary_file = fullfile(results_dir, 'evaluation_summary.txt');
+    fid_s = fopen(summary_file, 'w');
+    fprintf(fid_s, "========================================================================\n");
+    fprintf(fid_s, "       REZUMAT EVALUARE OFICIALĂ TEMA METODE NUMERICE 2026             \n");
+    fprintf(fid_s, "========================================================================\n");
+    fprintf(fid_s, "Directoriu evaluat: %s\n", test_dir);
+    fprintf(fid_s, "Data: %s\n", datestr(now));
+    fprintf(fid_s, "Total mostre evaluate: %d\n\n", num_images);
+    if has_labels
+        overall_acc = (correct_classifications / num_images) * 100;
+        fprintf(fid_s, "ACURATEȚE GLOBALĂ CLASIFICARE (TOP-1): %d/%d (%.2f%%)\n\n", ...
+                correct_classifications, num_images, overall_acc);
+    end
+    fprintf(fid_s, "PUNCTAJE MEDII PE TASK-URI:\n");
+    fprintf(fid_s, "  Task 1 (Filtrare Fourier 2D):              %5.2f / 30 puncte\n", avg_task_scores(1));
+    fprintf(fid_s, "  Task 2 (Transformata Wavelet Haar 2D):      %5.2f / 20 puncte\n", avg_task_scores(2));
+    fprintf(fid_s, "  Task 3 (Diferențiere Numerică Asimetrică): %5.2f / 20 puncte\n", avg_task_scores(3));
+    fprintf(fid_s, "  Task 4 (SVD, Hashing & Clasificare):        %5.2f / 20 puncte\n", avg_task_scores(4));
+    fprintf(fid_s, "------------------------------------------------------------------------\n");
+    fprintf(fid_s, "PUNCTAJ TOTAL OBTINUT:                       %5.2f / 90 puncte\n", avg_total_score);
+    fprintf(fid_s, "========================================================================\n");
+    fclose(fid_s);
+
+    fprintf('\nRaportul de evaluare a fost salvat în directorul: %s/\n', results_dir);
 endfunction
 
+function out = ternary(cond, val_true, val_false)
+    if cond
+        out = val_true;
+    else
+        out = val_false;
+    end
+endfunction
 
 function A_res = simple_resize(A, target_size)
     [R, C] = size(A);
@@ -182,7 +377,6 @@ function A_res = simple_resize(A, target_size)
     c_idx = round(linspace(1, C, N_c));
     A_res = A(r_idx, c_idx);
 endfunction
-
 
 function ref = build_reference_solution(A, known_hashes)
     N = size(A, 1);

@@ -55,30 +55,15 @@ function [total_score, task_scores] = compute_score(t1_res, t2_res, t3_res, t4_r
 
     % --- Task 4 Evaluation (20 points) ---
     t4_pts = 0;
-    if isfield(t4_res, 'distances') && ~isempty(t4_res.distances)
-        d = t4_res.distances;
-        K = 32; % Size of the hash
-        
-        % Convert Hamming distances to similarities (percentage of matching bits)
-        s = K - d;
-        P = s / K;
-        
-        max_prob = max(P);
-        
-        % Dispersed confidence brackets for 20 points max
-        if max_prob >= 0.90
-            t4_pts = 20;
-        elseif max_prob >= 0.80
-            t4_pts = 16;
-        elseif max_prob >= 0.70
-            t4_pts = 12;
-        elseif max_prob >= 0.60
-            t4_pts = 8;
-        elseif max_prob >= 0.50
-            t4_pts = 4;
-        else
-            t4_pts = 0;
-        end
+    if isfield(t4_res, 'v') && ~isempty(t4_res.v) && norm(t4_res.v(:) - ref.v(:)) < tol
+        t4_pts = t4_pts + 10; % Subtask 4.1: SVD singular values (10p)
+    end
+    if isfield(t4_res, 'b') && ~isempty(t4_res.b) && isequal(t4_res.b(:), ref.b(:))
+        t4_pts = t4_pts + 5;  % Subtask 4.2: Binary Hash vector (5p)
+    end
+    if isfield(t4_res, 'predicted_class') && ~isempty(t4_res.predicted_class) && ...
+       t4_res.predicted_class == ref.predicted_class
+        t4_pts = t4_pts + 5;  % Subtask 4.3: Nearest Neighbor Classification (5p)
     end
     task_scores(4) = t4_pts;
 
